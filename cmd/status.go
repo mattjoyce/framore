@@ -57,7 +57,7 @@ var statusCmd = &cobra.Command{
 		printStage("weather", "local", b.Stages.Weather, false,
 			fmt.Sprintf("timezone=%s", b.Weather.Timezone))
 		printStage("birdnet", "→ ductile", b.Stages.BirdNet, false,
-			fmt.Sprintf("min_conf=%.1f  threads=%d", b.BirdNet.MinConf, b.BirdNet.Threads))
+			fmt.Sprintf("min_conf=%.1f", b.BirdNet.MinConf))
 		printStage("transcribe", "deferred", false, true, "")
 		printStage("report", "→ ollama", b.Stages.Report, false,
 			cfg.Services.OllamaURL)

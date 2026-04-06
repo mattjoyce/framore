@@ -19,7 +19,7 @@ func TestLoadSaveRoundTrip(t *testing.T) {
 			BirdNet: true,
 			Report:  true,
 		},
-		BirdNet: BirdNetConfig{MinConf: 0.6, Threads: 4},
+		BirdNet: BirdNetConfig{MinConf: 0.6},
 		Weather: WeatherStageConfig{Timezone: "Australia/Sydney"},
 		Pipeline: PipelineConfig{
 			DefaultLat: -34.0021,

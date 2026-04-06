@@ -19,7 +19,6 @@ stages:
   report: true
 birdnet:
   min_conf: %.1f
-  threads: %d
 weather:
   timezone: "%s"
 pipeline:
@@ -28,7 +27,6 @@ pipeline:
 files: []
 `,
 		cfg.Defaults.BirdnetMinConf,
-		cfg.Defaults.BirdnetThreads,
 		cfg.Defaults.Timezone,
 		cfg.Defaults.DefaultLat,
 		cfg.Defaults.DefaultLon,

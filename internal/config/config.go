@@ -21,7 +21,6 @@ type Defaults struct {
 	DefaultLat     float64 `toml:"default_lat"`
 	DefaultLon     float64 `toml:"default_lon"`
 	BirdnetMinConf float64 `toml:"birdnet_min_conf"`
-	BirdnetThreads int     `toml:"birdnet_threads"`
 }
 
 type PathMapping struct {
@@ -34,8 +33,8 @@ type Paths struct {
 }
 
 type Services struct {
-	DuctileURL       string `toml:"ductile_url"`
-	DuctileSecretEnv string `toml:"ductile_secret_env"`
+	DuctileAPIURL    string `toml:"ductile_api_url"`
+	DuctileTokenEnv  string `toml:"ductile_token_env"`
 	OllamaURL        string `toml:"ollama_url"`
 }
 
@@ -68,7 +67,6 @@ func DefaultConfig() *Config {
 			DefaultLat:     -34.0021,
 			DefaultLon:     150.4987,
 			BirdnetMinConf: 0.6,
-			BirdnetThreads: 4,
 		},
 		Paths: Paths{
 			AllowedPaths: []PathMapping{
@@ -76,9 +74,9 @@ func DefaultConfig() *Config {
 			},
 		},
 		Services: Services{
-			DuctileURL:       "http://192.168.20.4:8091/webhook/birda",
-			DuctileSecretEnv: "FRAMORE_DUCTILE_SECRET",
-			OllamaURL:        "http://192.168.20.4:11434",
+			DuctileAPIURL:   "http://192.168.20.4:8888",
+			DuctileTokenEnv: "FRAMORE_DUCTILE_TOKEN",
+			OllamaURL:       "http://192.168.20.4:11434",
 		},
 		Weather: WeatherConfig{
 			CacheDir:        "~/.cache/framore/weather",

@@ -7,8 +7,8 @@ import (
 	"github.com/mattjoyce/framore/internal/pipeline"
 )
 
-// ResolveGPS returns the best GPS coordinates from EXIF results,
-// falling back to the batch pipeline defaults.
+// ResolveGPS computes the centroid of all EXIF GPS coordinates,
+// falling back to batch pipeline defaults if no photos have GPS.
 func ResolveGPS(b *batch.Batch, results *pipeline.Results) (lat, lon float64) {
 	lat = b.Pipeline.DefaultLat
 	lon = b.Pipeline.DefaultLon
@@ -21,12 +21,20 @@ func ResolveGPS(b *batch.Batch, results *pipeline.Results) (lat, lon float64) {
 	if !ok {
 		return lat, lon
 	}
+
+	var sumLat, sumLon float64
+	var count int
 	for _, p := range photos {
 		if p.Lat != 0 || p.Lon != 0 {
-			return p.Lat, p.Lon
+			sumLat += p.Lat
+			sumLon += p.Lon
+			count++
 		}
 	}
-	return lat, lon
+	if count == 0 {
+		return lat, lon
+	}
+	return sumLat / float64(count), sumLon / float64(count)
 }
 
 // BirdNETWeek computes the ISO week number from a date string (YYYY-MM-DD),

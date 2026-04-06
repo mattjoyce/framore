@@ -7,57 +7,110 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+	"time"
 )
 
-func TestSign(t *testing.T) {
-	c := NewClient("http://example.com", "test-secret")
-	sig := c.Sign([]byte(`{"payload":{"wav_path":"/test.WAV"}}`))
-
-	if sig[:7] != "sha256=" {
-		t.Errorf("signature should start with 'sha256=', got %q", sig[:7])
-	}
-	if len(sig) != 7+64 { // sha256= + 64 hex chars
-		t.Errorf("signature length: got %d, want 71", len(sig))
-	}
-}
-
-func TestPost(t *testing.T) {
-	type testPayload struct {
-		Msg string `json:"msg"`
-	}
-
+func TestSubmit(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPost {
 			t.Errorf("method: got %s, want POST", r.Method)
 		}
+		if r.URL.Path != "/plugin/birda/handle" {
+			t.Errorf("path: got %s, want /plugin/birda/handle", r.URL.Path)
+		}
+		auth := r.Header.Get("Authorization")
+		if auth != "Bearer test-token" {
+			t.Errorf("Authorization: got %q", auth)
+		}
 		if ct := r.Header.Get("Content-Type"); ct != "application/json" {
 			t.Errorf("Content-Type: got %q", ct)
 		}
-		sig := r.Header.Get("X-Ductile-Signature-256")
-		if sig == "" {
-			t.Error("missing X-Ductile-Signature-256 header")
-		}
-		if sig[:7] != "sha256=" {
-			t.Errorf("signature prefix: got %q", sig[:7])
-		}
 
 		body, _ := io.ReadAll(r.Body)
-		var p testPayload
-		if err := json.Unmarshal(body, &p); err != nil {
+		var req map[string]any
+		if err := json.Unmarshal(body, &req); err != nil {
 			t.Errorf("unmarshal body: %v", err)
 		}
+		if _, ok := req["payload"]; !ok {
+			t.Error("missing payload wrapper in request body")
+		}
 
-		w.WriteHeader(http.StatusOK)
-		w.Write([]byte(`{"status":"ok"}`))
+		w.WriteHeader(http.StatusAccepted)
+		json.NewEncoder(w).Encode(SubmitResponse{
+			JobID:   "job-123",
+			Status:  "queued",
+			Plugin:  "birda",
+			Command: "handle",
+		})
 	}))
 	defer srv.Close()
 
-	client := NewClient(srv.URL, "test-secret")
-	resp, err := client.Post(context.Background(), testPayload{Msg: "hello"})
+	client := NewClient(srv.URL, "test-token")
+	sr, err := client.Submit(context.Background(), "birda", "handle", map[string]any{
+		"wav_path": "/mnt/user/test.WAV",
+		"lat":      -34.0,
+		"lon":      150.5,
+	})
 	if err != nil {
-		t.Fatalf("Post: %v", err)
+		t.Fatalf("Submit: %v", err)
 	}
-	if string(resp) != `{"status":"ok"}` {
-		t.Errorf("response: got %q", string(resp))
+	if sr.JobID != "job-123" {
+		t.Errorf("JobID: got %q, want job-123", sr.JobID)
+	}
+}
+
+func TestGetJob(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/job/job-123" {
+			t.Errorf("path: got %s", r.URL.Path)
+		}
+		w.WriteHeader(http.StatusOK)
+		json.NewEncoder(w).Encode(map[string]any{
+			"job_id":  "job-123",
+			"status":  "succeeded",
+			"plugin":  "birda",
+			"command": "handle",
+			"result":  map[string]any{"status": "ok", "detection_count": 5},
+		})
+	}))
+	defer srv.Close()
+
+	client := NewClient(srv.URL, "test-token")
+	job, err := client.GetJob(context.Background(), "job-123")
+	if err != nil {
+		t.Fatalf("GetJob: %v", err)
+	}
+	if job.Status != "succeeded" {
+		t.Errorf("Status: got %q", job.Status)
+	}
+}
+
+func TestWaitForJob(t *testing.T) {
+	callCount := 0
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		callCount++
+		status := "running"
+		if callCount >= 2 {
+			status = "succeeded"
+		}
+		w.WriteHeader(http.StatusOK)
+		json.NewEncoder(w).Encode(map[string]any{
+			"job_id": "job-456",
+			"status": status,
+			"result": map[string]any{"status": "ok"},
+		})
+	}))
+	defer srv.Close()
+
+	client := NewClient(srv.URL, "test-token")
+	job, err := client.WaitForJob(context.Background(), "job-456", 10*time.Millisecond)
+	if err != nil {
+		t.Fatalf("WaitForJob: %v", err)
+	}
+	if job.Status != "succeeded" {
+		t.Errorf("Status: got %q", job.Status)
+	}
+	if callCount < 2 {
+		t.Errorf("expected at least 2 polls, got %d", callCount)
 	}
 }

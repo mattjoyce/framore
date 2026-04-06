@@ -22,7 +22,7 @@ func TestDefaultConfig(t *testing.T) {
 	if cfg.Paths.AllowedPaths[0].Mac != "/Volumes/field_Recording" {
 		t.Errorf("AllowedPaths[0].Mac: got %q", cfg.Paths.AllowedPaths[0].Mac)
 	}
-	if cfg.Services.DuctileSecretEnv != "FRAMORE_DUCTILE_SECRET" {
-		t.Errorf("DuctileSecretEnv: got %q", cfg.Services.DuctileSecretEnv)
+	if cfg.Services.DuctileTokenEnv != "FRAMORE_DUCTILE_TOKEN" {
+		t.Errorf("DuctileTokenEnv: got %q", cfg.Services.DuctileTokenEnv)
 	}
 }

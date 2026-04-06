@@ -3,50 +3,64 @@ package ductile
 import (
 	"bytes"
 	"context"
-	"crypto/hmac"
-	"crypto/sha256"
-	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
+	"time"
 )
 
+// Client talks to the Ductile REST API (Bearer token auth).
 type Client struct {
-	URL    string
-	Secret string
-	HTTP   *http.Client
+	BaseURL string
+	Token   string
+	HTTP    *http.Client
 }
 
-func NewClient(url, secret string) *Client {
+func NewClient(baseURL, token string) *Client {
 	return &Client{
-		URL:    url,
-		Secret: secret,
-		HTTP:   &http.Client{},
+		BaseURL: baseURL,
+		Token:   token,
+		HTTP:    &http.Client{Timeout: 10 * time.Second},
 	}
 }
 
-// Sign computes HMAC-SHA256 and returns "sha256=<hex>"
-func (c *Client) Sign(body []byte) string {
-	mac := hmac.New(sha256.New, []byte(c.Secret))
-	mac.Write(body)
-	return "sha256=" + hex.EncodeToString(mac.Sum(nil))
+// SubmitResponse is the 202 Accepted response from POST /plugin/{name}/{command}.
+type SubmitResponse struct {
+	JobID   string `json:"job_id"`
+	Status  string `json:"status"`
+	Plugin  string `json:"plugin"`
+	Command string `json:"command"`
 }
 
-// Post sends a signed JSON payload to the Ductile webhook
-func (c *Client) Post(ctx context.Context, payload any) ([]byte, error) {
-	bodyBytes, err := json.Marshal(payload)
+// JobResponse is the response from GET /job/{id}.
+type JobResponse struct {
+	JobID       string          `json:"job_id"`
+	Status      string          `json:"status"`
+	Plugin      string          `json:"plugin"`
+	Command     string          `json:"command"`
+	CreatedAt   string          `json:"created_at"`
+	StartedAt   string          `json:"started_at"`
+	CompletedAt string          `json:"completed_at"`
+	Result      json.RawMessage `json:"result"`
+}
+
+// Submit sends a payload to POST /plugin/{plugin}/{command} and returns the job ID.
+func (c *Client) Submit(ctx context.Context, plugin, command string, payload any) (*SubmitResponse, error) {
+	body := map[string]any{"payload": payload}
+	bodyBytes, err := json.Marshal(body)
 	if err != nil {
 		return nil, fmt.Errorf("marshal payload: %w", err)
 	}
 
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, c.URL, bytes.NewReader(bodyBytes))
+	url := fmt.Sprintf("%s/plugin/%s/%s", c.BaseURL, plugin, command)
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(bodyBytes))
 	if err != nil {
 		return nil, fmt.Errorf("create request: %w", err)
 	}
 
 	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("X-Ductile-Signature-256", c.Sign(bodyBytes))
+	req.Header.Set("Authorization", "Bearer "+c.Token)
 
 	resp, err := c.HTTP.Do(req)
 	if err != nil {
@@ -59,9 +73,69 @@ func (c *Client) Post(ctx context.Context, payload any) ([]byte, error) {
 		return nil, fmt.Errorf("read response: %w", err)
 	}
 
+	if resp.StatusCode != http.StatusAccepted && resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("ductile returned %d: %s", resp.StatusCode, string(respBody))
+	}
+
+	var sr SubmitResponse
+	if err := json.Unmarshal(respBody, &sr); err != nil {
+		return nil, fmt.Errorf("parse submit response: %w", err)
+	}
+	return &sr, nil
+}
+
+// GetJob retrieves the current status of a job.
+func (c *Client) GetJob(ctx context.Context, jobID string) (*JobResponse, error) {
+	url := fmt.Sprintf("%s/job/%s", c.BaseURL, jobID)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	if err != nil {
+		return nil, fmt.Errorf("create request: %w", err)
+	}
+	req.Header.Set("Authorization", "Bearer "+c.Token)
+
+	resp, err := c.HTTP.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("http get: %w", err)
+	}
+	defer resp.Body.Close()
+
+	respBody, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("read response: %w", err)
+	}
+
 	if resp.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("ductile returned %d: %s", resp.StatusCode, string(respBody))
 	}
 
-	return respBody, nil
+	var jr JobResponse
+	if err := json.Unmarshal(respBody, &jr); err != nil {
+		return nil, fmt.Errorf("parse job response: %w", err)
+	}
+	return &jr, nil
+}
+
+// WaitForJob polls until the job reaches a terminal state. Returns the final job response.
+func (c *Client) WaitForJob(ctx context.Context, jobID string, pollInterval time.Duration) (*JobResponse, error) {
+	for {
+		job, err := c.GetJob(ctx, jobID)
+		if err != nil {
+			return nil, err
+		}
+
+		switch job.Status {
+		case "succeeded", "failed", "dead", "timed_out":
+			return job, nil
+		case "queued", "running":
+			// keep polling
+		default:
+			return job, nil
+		}
+
+		select {
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		case <-time.After(pollInterval):
+		}
+	}
 }

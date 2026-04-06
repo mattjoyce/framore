@@ -26,7 +26,6 @@ type StageConfig struct {
 
 type BirdNetConfig struct {
 	MinConf float64 `yaml:"min_conf"`
-	Threads int     `yaml:"threads"`
 }
 
 type WeatherStageConfig struct {
