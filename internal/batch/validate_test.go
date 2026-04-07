@@ -9,28 +9,36 @@ import (
 func TestCheckAllowedPath_Valid(t *testing.T) {
 	cfg := &config.Config{
 		Paths: config.Paths{
-			AllowedPaths: []config.PathMapping{
-				{Mac: "/Volumes/field_Recording", NAS: "/mnt/field_Recording"},
-			},
+			ProcessingRoot: "/mnt/user/field_Recording",
+			AllowedPaths:   []string{"/Volumes/field_Recording", "/mnt/field_Recording"},
 		},
 	}
 
+	// Mac path
 	nasPath, err := CheckAllowedPath("/Volumes/field_Recording/F3/Orig/test.WAV", cfg)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	want := "/mnt/field_Recording/F3/Orig/test.WAV"
+	want := "/mnt/user/field_Recording/F3/Orig/test.WAV"
 	if nasPath != want {
-		t.Errorf("got %q, want %q", nasPath, want)
+		t.Errorf("mac: got %q, want %q", nasPath, want)
+	}
+
+	// Linux path
+	nasPath, err = CheckAllowedPath("/mnt/field_Recording/F3/Orig/test.WAV", cfg)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if nasPath != want {
+		t.Errorf("linux: got %q, want %q", nasPath, want)
 	}
 }
 
 func TestCheckAllowedPath_Rejected(t *testing.T) {
 	cfg := &config.Config{
 		Paths: config.Paths{
-			AllowedPaths: []config.PathMapping{
-				{Mac: "/Volumes/field_Recording", NAS: "/mnt/field_Recording"},
-			},
+			ProcessingRoot: "/mnt/user/field_Recording",
+			AllowedPaths:   []string{"/Volumes/field_Recording"},
 		},
 	}
 

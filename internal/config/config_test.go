@@ -16,11 +16,14 @@ func TestDefaultConfig(t *testing.T) {
 	if cfg.Defaults.BirdnetMinConf != 0.6 {
 		t.Errorf("BirdnetMinConf: got %f, want 0.6", cfg.Defaults.BirdnetMinConf)
 	}
-	if len(cfg.Paths.AllowedPaths) != 1 {
-		t.Fatalf("AllowedPaths: got %d, want 1", len(cfg.Paths.AllowedPaths))
+	if cfg.Paths.ProcessingRoot != "/mnt/user/field_Recording" {
+		t.Errorf("ProcessingRoot: got %q", cfg.Paths.ProcessingRoot)
 	}
-	if cfg.Paths.AllowedPaths[0].Mac != "/Volumes/field_Recording" {
-		t.Errorf("AllowedPaths[0].Mac: got %q", cfg.Paths.AllowedPaths[0].Mac)
+	if len(cfg.Paths.AllowedPaths) != 2 {
+		t.Fatalf("AllowedPaths: got %d, want 2", len(cfg.Paths.AllowedPaths))
+	}
+	if cfg.Paths.AllowedPaths[0] != "/Volumes/field_Recording" {
+		t.Errorf("AllowedPaths[0]: got %q", cfg.Paths.AllowedPaths[0])
 	}
 	if cfg.Services.DuctileTokenEnv != "FRAMORE_DUCTILE_TOKEN" {
 		t.Errorf("DuctileTokenEnv: got %q", cfg.Services.DuctileTokenEnv)

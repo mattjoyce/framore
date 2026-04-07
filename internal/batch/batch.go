@@ -33,6 +33,7 @@ type WeatherStageConfig struct {
 }
 
 type PipelineConfig struct {
+	PlusCode   string  `yaml:"plus_code,omitempty"`
 	DefaultLat float64 `yaml:"default_lat"`
 	DefaultLon float64 `yaml:"default_lon"`
 }

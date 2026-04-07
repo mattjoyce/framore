@@ -22,6 +22,7 @@ birdnet:
 weather:
   timezone: "%s"
 pipeline:
+  plus_code: ""
   default_lat: %.4f
   default_lon: %.4f
 files: []

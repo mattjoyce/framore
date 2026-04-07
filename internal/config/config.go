@@ -23,13 +23,9 @@ type Defaults struct {
 	BirdnetMinConf float64 `toml:"birdnet_min_conf"`
 }
 
-type PathMapping struct {
-	Mac string `toml:"mac"`
-	NAS string `toml:"nas"`
-}
-
 type Paths struct {
-	AllowedPaths []PathMapping `toml:"allowed_paths"`
+	ProcessingRoot string   `toml:"processing_root"`
+	AllowedPaths   []string `toml:"allowed_paths"`
 }
 
 type Services struct {
@@ -69,8 +65,10 @@ func DefaultConfig() *Config {
 			BirdnetMinConf: 0.6,
 		},
 		Paths: Paths{
-			AllowedPaths: []PathMapping{
-				{Mac: "/Volumes/field_Recording", NAS: "/mnt/field_Recording"},
+			ProcessingRoot: "/mnt/user/field_Recording",
+			AllowedPaths: []string{
+				"/Volumes/field_Recording",
+				"/mnt/field_Recording",
 			},
 		},
 		Services: Services{
@@ -110,6 +108,32 @@ func Load() (*Config, error) {
 	if err := toml.Unmarshal(data, &cfg); err != nil {
 		return nil, err
 	}
+
+	// Backfill any zero-value fields with defaults so configs created
+	// before new fields were added still work.
+	defaults := DefaultConfig()
+	if cfg.Defaults.Timezone == "" {
+		cfg.Defaults.Timezone = defaults.Defaults.Timezone
+	}
+	if cfg.Defaults.BirdnetMinConf == 0 {
+		cfg.Defaults.BirdnetMinConf = defaults.Defaults.BirdnetMinConf
+	}
+	if cfg.Services.DuctileAPIURL == "" {
+		cfg.Services.DuctileAPIURL = defaults.Services.DuctileAPIURL
+	}
+	if cfg.Services.DuctileTokenEnv == "" {
+		cfg.Services.DuctileTokenEnv = defaults.Services.DuctileTokenEnv
+	}
+	if cfg.Services.OllamaURL == "" {
+		cfg.Services.OllamaURL = defaults.Services.OllamaURL
+	}
+	if cfg.Paths.ProcessingRoot == "" {
+		cfg.Paths.ProcessingRoot = defaults.Paths.ProcessingRoot
+	}
+	if len(cfg.Paths.AllowedPaths) == 0 {
+		cfg.Paths.AllowedPaths = defaults.Paths.AllowedPaths
+	}
+
 	return &cfg, nil
 }
 
