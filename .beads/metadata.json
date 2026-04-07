@@ -1,0 +1,7 @@
+{
+  "database": "dolt",
+  "backend": "dolt",
+  "dolt_mode": "embedded",
+  "dolt_database": "framore",
+  "project_id": "bbba9c27-66cf-4227-a550-097d4a755b60"
+}
