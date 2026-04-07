@@ -38,7 +38,7 @@ var startCmd = &cobra.Command{
 			&stages.EXIF{},
 			&stages.Weather{Cfg: cfg},
 			&stages.BirdNet{Cfg: cfg},
-			&stages.Report{},
+			&stages.Report{Cfg: cfg},
 		}
 
 		// Filter to single stage if requested
