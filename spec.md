@@ -188,16 +188,18 @@ birdnet_min_conf = 0.6
 birdnet_threads  = 4
 
 [paths]
+# Root path on the NAS where files are stored.
+processing_root = "/mnt/user/field_Recording"
 # Files added to a batch must be under one of these Mac-side prefixes.
-# Each entry maps the Mac mount path to the equivalent NAS path.
-# This is used both to validate add and to translate paths in webhook payloads.
+# Path translation replaces the matching prefix with processing_root.
 allowed_paths = [
-    { mac = "/Volumes/field_Recording", nas = "/mnt/field_Recording" },
+    "/Volumes/field_Recording",
+    "/mnt/field_Recording",
 ]
 
 [services]
-ductile_url        = "http://192.168.20.4:8091/webhook/birda"
-ductile_secret_env = "FRAMORE_DUCTILE_SECRET"   # name of env var holding HMAC secret
+ductile_api_url    = "http://192.168.20.4:8888"
+ductile_token_env  = "FRAMORE_DUCTILE_TOKEN"     # name of env var holding Bearer token
 ollama_url         = "http://192.168.20.4:11434"
 
 [weather]
@@ -209,7 +211,7 @@ timeout_seconds    = 30
 log_level = "info"   # debug | info | warn | error
 ```
 
-**No secrets in config.** `ductile_secret_env` is the *name* of an environment variable, not the secret itself. The binary reads `os.Getenv(cfg.Services.DuctileSecretEnv)` at runtime.
+**No secrets in config.** `ductile_token_env` is the *name* of an environment variable, not the token itself. The binary reads `os.Getenv(cfg.Services.DuctileTokenEnv)` at runtime.
 
 ---
 
@@ -289,7 +291,7 @@ Add files to the active batch. Accepts a single file, a glob (`*.WAV`), or a dir
 
 **Supported formats (v0.1):** `.WAV`, `.wav`, `.jpg`, `.jpeg`, `.JPG`, `.JPEG`, `.png`
 
-**Path guard:** resolve each file to an absolute path, then check it is under one of the `allowed_paths[*].mac` prefixes. Reject with a clear message if not:
+**Path guard:** resolve each file to an absolute path, then check it is under one of the `allowed_paths` prefixes. Reject with a clear message if not:
 ```
 ✗ /Users/matt/Downloads/test.wav — not under an allowed path
   Add a path mapping in ~/.config/framore/config.toml → [paths] allowed_paths
@@ -408,7 +410,7 @@ framore start --verbose              # per-file progress lines
 ```
 1. exif     local    parse EXIF from image files → build []PhotoGPS
 2. weather  local    open-meteo API → WeatherResult (cached)
-3. birdnet  remote   POST to Ductile webhook → BirdNetResult per audio file
+3. birdnet  remote   submit-all-then-poll via Ductile REST API → BirdNetFileResult per file + SessionBirdNetResult
 4. report   remote   POST to Ollama → writes session_report.md
 ```
 
@@ -474,7 +476,7 @@ Store under `results.Set("weather", "session", weatherResult)`.
 
 ## Stage: BirdNET (birda)
 
-**Purpose:** run bird species detection on each audio file via the birda Ductile webhook.
+**Purpose:** run bird species detection on each audio file via the Ductile REST API.
 
 **Week derivation:** parse `session_date` from the batch as a `time.Time`. Compute ISO week number with `t.ISOWeek()`. Clamp to 1–48: if week > 48, use 48.
 
@@ -485,37 +487,38 @@ if week > 48 {
 }
 ```
 
-**Path translation:** before building the payload, translate the Mac path to the NAS path using the `allowed_paths` mapping from global config:
+**GPS resolution priority:**
+1. EXIF centroid from photos (if exif stage ran and found GPS)
+2. Plus code from `pipeline.plus_code` in the batch
+3. `pipeline.default_lat` / `pipeline.default_lon` from the batch
+
+**Path translation:** before building the payload, translate the Mac path to the NAS path using `batch.CheckAllowedPath()`. This replaces the first matching `allowed_paths` prefix with `processing_root`:
 ```
 /Volumes/field_Recording/F3/Orig/file.WAV
-→ /mnt/field_Recording/F3/Orig/file.WAV
+→ /mnt/user/field_Recording/F3/Orig/file.WAV
 ```
 
-Implementation: `strings.Replace(macPath, mapping.Mac, mapping.NAS, 1)` — apply the first matching prefix.
+### Execution model: submit-all-then-poll
 
-**Ductile webhook call** (one call per audio file):
+The stage operates in two phases to maximise GPU throughput:
 
-URL: `services.ductile_url`
+**Phase 1 — Submit all:** iterate every audio file in the batch and call `POST /plugin/birda/handle` via the Ductile REST API. Each successful submit returns a job ID. Collect all job IDs into a `[]pendingJob` slice. Submit errors for individual files are logged and skipped — they do not abort the batch. Non-audio files are skipped silently.
 
-Headers:
-```
-Content-Type: application/json
-X-Ductile-Signature-256: sha256=<hex>
-```
+**Phase 2 — Poll all:** loop over remaining pending jobs, calling `GET /job/{id}` for each. Jobs still `"queued"` or `"running"` stay in the pending list. Jobs that reach `"succeeded"` have their result parsed into `BirdNetFileResult`. Jobs that reach `"failed"`, `"dead"`, or `"timed_out"` are logged and dropped. Between poll rounds, sleep 3 seconds. The loop exits when no jobs remain. Context cancellation is checked at the start of each round and during the sleep.
 
-HMAC computation:
-```go
-secret := os.Getenv(cfg.Services.DuctileSecretEnv)
-mac := hmac.New(sha256.New, []byte(secret))
-mac.Write(bodyBytes)
-sig := "sha256=" + hex.EncodeToString(mac.Sum(nil))
-```
+This replaces the earlier sequential submit→wait→submit→wait pattern. Since Ductile serialises GPU access internally, submitting all jobs upfront is safe and lets the queue fill immediately.
 
-Payload shape:
+**Ductile REST API:**
+
+Authentication: Bearer token via `Authorization: Bearer <token>` header.
+Token source: `os.Getenv(cfg.Services.DuctileTokenEnv)`.
+
+Submit: `POST {ductile_api_url}/plugin/birda/handle`
+
 ```json
 {
   "payload": {
-    "wav_path": "/mnt/field_Recording/F3/Orig/.../221053_0001.WAV",
+    "wav_path": "/mnt/user/field_Recording/F3/Orig/.../221053_0001.WAV",
     "lat": -34.0021,
     "lon": 150.4987,
     "min_conf": 0.6,
@@ -524,21 +527,42 @@ Payload shape:
 }
 ```
 
-Response fields used:
+Submit response (202 Accepted):
 ```json
 {
-  "output_path": "/mnt/.../birdnet_output/221053_0001.csv",
-  "detections": [...],
-  "detection_count": 12,
-  "duration_s": 182.4
+  "job_id": "abc-123",
+  "status": "queued",
+  "plugin": "birda",
+  "command": "handle"
 }
 ```
 
-Store per-file result: `results.Set("birdnet", file.Path, birdNetResult)`.
+Poll: `GET {ductile_api_url}/job/{job_id}`
 
-**Error handling:** if the webhook returns non-200 or network error, log the error with the file path and continue with remaining files.
+Job response (on success):
+```json
+{
+  "job_id": "abc-123",
+  "status": "succeeded",
+  "result": {
+    "output_path": "/mnt/.../birdnet_output/221053_0001.csv",
+    "detections": [...],
+    "detection_count": 12,
+    "duration_s": 182.4,
+    "realtime_factor": 4.5
+  }
+}
+```
 
-**Implementation note:** confirm the exact payload schema against the live birda plugin before coding. The ductile plugin config is at `/mnt/user/Projects/unraid_admin/ductile/config/` on the NAS.
+**Session-level unification:** after all polling completes, per-file detections are merged into a `SessionBirdNetResult` containing a deduplicated species summary with max confidence, total detections, and file counts per species.
+
+**Results storage:**
+- Per-file: `results.Set("birdnet", file.Path, birdNetFileResult)`
+- Session: `results.Set("birdnet", "session", sessionBirdNetResult)`
+
+**Elapsed timer:** total wall-clock time for the birdnet stage is printed on the final summary line.
+
+**Error handling:** submit and poll errors for individual files are logged but do not abort the batch. The session result reflects only successfully completed files.
 
 ---
 
@@ -638,7 +662,7 @@ framore/
       birdnet.go    # BirdNET stage
       report.go     # Report stage (stub for now)
     ductile/
-      client.go     # NewClient, Post — handles HMAC and HTTP
+      client.go     # NewClient, Submit, GetJob, WaitForJob — Bearer token auth
     ollama/
       client.go     # NewClient, Generate — handles HTTP POST to /api/generate
     config/

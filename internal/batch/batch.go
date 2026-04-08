@@ -25,7 +25,8 @@ type StageConfig struct {
 }
 
 type BirdNetConfig struct {
-	MinConf float64 `yaml:"min_conf"`
+	MinConf      float64 `yaml:"min_conf"`
+	SkipExisting bool    `yaml:"skip_existing"`
 }
 
 type WeatherStageConfig struct {

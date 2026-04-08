@@ -49,6 +49,7 @@ var configCmd = &cobra.Command{
 			timezone = cfg.Defaults.Timezone
 		}
 		enableBirdNet := b.Stages.BirdNet
+		skipExisting := b.BirdNet.SkipExisting
 		minConfStr := fmt.Sprintf("%.1f", b.BirdNet.MinConf)
 		if b.BirdNet.MinConf == 0 {
 			minConfStr = fmt.Sprintf("%.1f", cfg.Defaults.BirdnetMinConf)
@@ -136,6 +137,10 @@ var configCmd = &cobra.Command{
 			huh.NewConfirm().
 				Title("Enable BirdNET detection?").
 				Value(&enableBirdNet),
+			huh.NewConfirm().
+				Title("Skip files with existing BirdNET output?").
+				Description("Skips WAVs that already have a .BirdNET.selection.table.txt file").
+				Value(&skipExisting),
 			huh.NewInput().
 				Title("Min confidence (0.0–1.0)").
 				Value(&minConfStr).
@@ -218,6 +223,7 @@ var configCmd = &cobra.Command{
 		b.Weather.Timezone = timezone
 		b.Stages.BirdNet = enableBirdNet
 		b.BirdNet.MinConf, _ = strconv.ParseFloat(minConfStr, 64)
+		b.BirdNet.SkipExisting = skipExisting
 		b.Stages.Report = enableReport
 		b.Stages.EXIF = imageCount > 0
 

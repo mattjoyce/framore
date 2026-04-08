@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/mattjoyce/framore/internal/batch"
@@ -53,6 +55,56 @@ type SessionBirdNetResult struct {
 	FileResults    []BirdNetFileResult `json:"file_results"`
 }
 
+// pendingJob tracks a submitted Ductile job awaiting completion.
+type pendingJob struct {
+	jobID    string
+	filePath string
+}
+
+// pollProgress tracks running stats during the poll phase.
+type pollProgress struct {
+	total      int
+	completed  int
+	failed     int
+	skipped    int
+	detections int
+	species    map[string]bool
+	started    time.Time
+}
+
+func (p *pollProgress) printLine() {
+	elapsed := time.Since(p.started).Truncate(time.Second)
+	done := p.completed + p.failed
+	if p.failed > 0 {
+		fmt.Printf("\r\033[2K  [birdnet] %d/%d complete (%d failed) | %d detections | %d species | elapsed %s",
+			done, p.total, p.failed, p.detections, len(p.species), elapsed)
+	} else {
+		fmt.Printf("\r\033[2K  [birdnet] %d/%d complete | %d detections | %d species | elapsed %s",
+			done, p.total, p.detections, len(p.species), elapsed)
+	}
+}
+
+func (p *pollProgress) clearLine() {
+	fmt.Print("\r\033[2K")
+}
+
+// emit clears the progress line, prints a status message, then reprints the progress line.
+func (p *pollProgress) emit(format string, args ...any) {
+	p.clearLine()
+	fmt.Printf(format, args...)
+	p.printLine()
+}
+
+// birdnetOutputPath returns the expected BirdNET output path for a WAV file.
+// Pattern: <dir>/<basename_without_ext>.BirdNET.selection.table.txt
+func birdnetOutputPath(wavPath string) string {
+	dir := filepath.Dir(wavPath)
+	base := filepath.Base(wavPath)
+	ext := filepath.Ext(base)
+	stem := strings.TrimSuffix(base, ext)
+	return filepath.Join(dir, stem+".BirdNET.selection.table.txt")
+}
+
 type BirdNet struct {
 	Cfg *config.Config
 }
@@ -62,6 +114,8 @@ func (bn *BirdNet) Name() string { return "birdnet" }
 func (bn *BirdNet) Enabled(b *batch.Batch) bool { return b.Stages.BirdNet }
 
 func (bn *BirdNet) Run(ctx context.Context, b *batch.Batch, results *pipeline.Results) error {
+	started := time.Now()
+
 	week, err := BirdNETWeek(b.SessionDate)
 	if err != nil {
 		return fmt.Errorf("parse session_date: %w", err)
@@ -81,15 +135,23 @@ func (bn *BirdNet) Run(ctx context.Context, b *batch.Batch, results *pipeline.Re
 		minConf = bn.Cfg.Defaults.BirdnetMinConf
 	}
 
-	var fileResults []BirdNetFileResult
-	totalDetections := 0
-
+	// Phase 1: Submit all audio files, collect job IDs
+	var pending []pendingJob
+	skipped := 0
 	for _, f := range b.Files {
 		if f.Type != "audio" {
 			continue
 		}
 
-		// Translate Mac path to NAS path
+		if b.BirdNet.SkipExisting {
+			outPath := birdnetOutputPath(f.Path)
+			if _, err := os.Stat(outPath); err == nil {
+				skipped++
+				fmt.Printf("  [birdnet] skip %s (output exists)\n", filepath.Base(f.Path))
+				continue
+			}
+		}
+
 		nasPath, err := batch.CheckAllowedPath(f.Path, bn.Cfg)
 		if err != nil {
 			fmt.Printf("  [birdnet] skip %s: %v\n", f.Path, err)
@@ -106,7 +168,6 @@ func (bn *BirdNet) Run(ctx context.Context, b *batch.Batch, results *pipeline.Re
 
 		fmt.Printf("  [birdnet] submitting %s (week %d)\n", f.Path, week)
 
-		// Submit job via API
 		sr, err := client.Submit(ctx, "birda", "handle", payload)
 		if err != nil {
 			fmt.Printf("  [birdnet] submit error for %s: %v\n", f.Path, err)
@@ -114,59 +175,112 @@ func (bn *BirdNet) Run(ctx context.Context, b *batch.Batch, results *pipeline.Re
 		}
 
 		fmt.Printf("  [birdnet] job %s queued for %s\n", sr.JobID, f.Path)
-
-		// Poll for completion (sync)
-		job, err := client.WaitForJob(ctx, sr.JobID, 3*time.Second)
-		if err != nil {
-			fmt.Printf("  [birdnet] poll error for %s: %v\n", f.Path, err)
-			continue
-		}
-
-		if job.Status != "succeeded" {
-			fmt.Printf("  [birdnet] job %s for %s: %s\n", job.JobID, f.Path, job.Status)
-			continue
-		}
-
-		// Parse the result from the job response
-		var pluginResp struct {
-			Status         string      `json:"status"`
-			OutputPath     string      `json:"output_path"`
-			Detections     []Detection `json:"detections"`
-			DetectionCount int         `json:"detection_count"`
-			DurationS      float64     `json:"duration_s"`
-			RealtimeFactor float64     `json:"realtime_factor"`
-		}
-		if err := json.Unmarshal(job.Result, &pluginResp); err != nil {
-			fmt.Printf("  [birdnet] parse result error for %s: %v\n", f.Path, err)
-			continue
-		}
-
-		fr := BirdNetFileResult{
-			FilePath:       f.Path,
-			OutputPath:     pluginResp.OutputPath,
-			Detections:     pluginResp.Detections,
-			DetectionCount: pluginResp.DetectionCount,
-			DurationS:      pluginResp.DurationS,
-			RealtimeFactor: pluginResp.RealtimeFactor,
-			JobID:          job.JobID,
-			JobStatus:      job.Status,
-		}
-
-		fileResults = append(fileResults, fr)
-		totalDetections += fr.DetectionCount
-
-		// Store per-file result
-		results.Set("birdnet", f.Path, fr)
-		fmt.Printf("  [birdnet] %s: %d detections (%.0fx realtime)\n",
-			f.Path, fr.DetectionCount, fr.RealtimeFactor)
+		pending = append(pending, pendingJob{jobID: sr.JobID, filePath: f.Path})
 	}
 
+	if skipped > 0 {
+		fmt.Printf("  [birdnet] submitted %d jobs, skipped %d (existing output), polling for completion…\n", len(pending), skipped)
+	} else {
+		fmt.Printf("  [birdnet] submitted %d jobs, polling for completion…\n", len(pending))
+	}
+
+	// Phase 2: Poll all jobs until all reach terminal state
+	var fileResults []BirdNetFileResult
+
+	progress := &pollProgress{
+		total:   len(pending),
+		species: make(map[string]bool),
+		started: started,
+	}
+	progress.printLine()
+
+	remaining := pending
+
+	for len(remaining) > 0 {
+		select {
+		case <-ctx.Done():
+			progress.clearLine()
+			return ctx.Err()
+		default:
+		}
+
+		var stillPending []pendingJob
+		for _, p := range remaining {
+			job, err := client.GetJob(ctx, p.jobID)
+			if err != nil {
+				progress.failed++
+				progress.emit("  [birdnet] poll error for %s: %v\n", p.filePath, err)
+				continue // drop this job from tracking
+			}
+
+			switch job.Status {
+			case "queued", "running":
+				stillPending = append(stillPending, p)
+				continue
+			case "succeeded":
+				var pluginResp struct {
+					Status         string      `json:"status"`
+					OutputPath     string      `json:"output_path"`
+					Detections     []Detection `json:"detections"`
+					DetectionCount int         `json:"detection_count"`
+					DurationS      float64     `json:"duration_s"`
+					RealtimeFactor float64     `json:"realtime_factor"`
+				}
+				if err := json.Unmarshal(job.Result, &pluginResp); err != nil {
+					progress.failed++
+					progress.emit("  [birdnet] parse result error for %s: %v\n", p.filePath, err)
+					continue
+				}
+
+				fr := BirdNetFileResult{
+					FilePath:       p.filePath,
+					OutputPath:     pluginResp.OutputPath,
+					Detections:     pluginResp.Detections,
+					DetectionCount: pluginResp.DetectionCount,
+					DurationS:      pluginResp.DurationS,
+					RealtimeFactor: pluginResp.RealtimeFactor,
+					JobID:          job.JobID,
+					JobStatus:      job.Status,
+				}
+
+				fileResults = append(fileResults, fr)
+
+				progress.completed++
+				progress.detections += fr.DetectionCount
+				for _, d := range fr.Detections {
+					progress.species[d.ScientificName] = true
+				}
+
+				results.Set("birdnet", p.filePath, fr)
+				progress.emit("  [birdnet] %s: %d detections (%.0fx realtime)\n",
+					p.filePath, fr.DetectionCount, fr.RealtimeFactor)
+			default:
+				progress.failed++
+				progress.emit("  [birdnet] job %s for %s: %s\n", job.JobID, p.filePath, job.Status)
+			}
+		}
+
+		remaining = stillPending
+		if len(remaining) > 0 {
+			progress.printLine()
+			select {
+			case <-ctx.Done():
+				progress.clearLine()
+				return ctx.Err()
+			case <-time.After(3 * time.Second):
+			}
+		}
+	}
+
+	progress.clearLine()
+
 	// Unify into session-level species summary
-	session := unifyDetections(fileResults, totalDetections)
+	session := unifyDetections(fileResults, progress.detections)
 	results.Set("birdnet", "session", session)
 
-	fmt.Printf("  [birdnet] session: %d species across %d files, %d total detections\n",
-		len(session.Species), session.TotalFiles, session.TotalDetections)
+	elapsed := time.Since(started)
+	fmt.Printf("  [birdnet] session: %d species across %d files, %d total detections (elapsed %s)\n",
+		len(session.Species), session.TotalFiles, session.TotalDetections, elapsed.Truncate(time.Second))
 
 	return nil
 }
