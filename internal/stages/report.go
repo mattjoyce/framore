@@ -194,6 +194,16 @@ func buildDataContext(b *batch.Batch, results *pipeline.Results) string {
 	return sb.String()
 }
 
+// sortedSpeciesByDetections returns a copy of species sorted by TotalDetections descending.
+func sortedSpeciesByDetections(species []SpeciesSummary) []SpeciesSummary {
+	sorted := make([]SpeciesSummary, len(species))
+	copy(sorted, species)
+	sort.Slice(sorted, func(i, j int) bool {
+		return sorted[i].TotalDetections > sorted[j].TotalDetections
+	})
+	return sorted
+}
+
 // writeBirdNETSection writes the BirdNET detections table. If limit > 0,
 // only the top N species by detection count are included and the rest noted.
 func writeBirdNETSection(sb *strings.Builder, sr SessionBirdNetResult, limit int) {
@@ -201,11 +211,7 @@ func writeBirdNETSection(sb *strings.Builder, sr SessionBirdNetResult, limit int
 	fmt.Fprintf(sb, "- Total detections: %d across %d files\n", sr.TotalDetections, sr.TotalFiles)
 	fmt.Fprintf(sb, "- Species count: %d\n\n", len(sr.Species))
 
-	sorted := make([]SpeciesSummary, len(sr.Species))
-	copy(sorted, sr.Species)
-	sort.Slice(sorted, func(i, j int) bool {
-		return sorted[i].TotalDetections > sorted[j].TotalDetections
-	})
+	sorted := sortedSpeciesByDetections(sr.Species)
 
 	show := sorted
 	remainder := 0
@@ -247,11 +253,7 @@ func buildSpeciesSummaryContext(b *batch.Batch, results *pipeline.Results) strin
 		return sb.String()
 	}
 
-	sorted := make([]SpeciesSummary, len(sr.Species))
-	copy(sorted, sr.Species)
-	sort.Slice(sorted, func(i, j int) bool {
-		return sorted[i].TotalDetections > sorted[j].TotalDetections
-	})
+	sorted := sortedSpeciesByDetections(sr.Species)
 
 	show := sorted
 	if len(sorted) > topSpeciesLimit {
@@ -319,7 +321,7 @@ func buildLargeSessionContext(b *batch.Batch, results *pipeline.Results) string 
 			writeBirdNETSection(&sb, sr, topSpeciesLimit)
 
 			// Hourly activity bucketing
-			hourlyActivity := buildHourlyBuckets(b, results)
+			hourlyActivity := buildHourlyBuckets(results)
 			if len(hourlyActivity) > 0 {
 				sb.WriteString("## Hourly Activity\n")
 				sb.WriteString("| Hour | Detections | Species |\n")
@@ -337,8 +339,6 @@ func buildLargeSessionContext(b *batch.Batch, results *pipeline.Results) string 
 				}
 				sb.WriteString("\n")
 			}
-
-			_ = sr // used above
 		}
 	}
 
@@ -352,7 +352,7 @@ type hourlyBucket struct {
 
 // buildHourlyBuckets aggregates detections into hourly bins based on
 // the F3 filename convention (HHMMSS_NNNN.WAV) and detection offset.
-func buildHourlyBuckets(b *batch.Batch, results *pipeline.Results) map[int]*hourlyBucket {
+func buildHourlyBuckets(results *pipeline.Results) map[int]*hourlyBucket {
 	buckets := make(map[int]*hourlyBucket)
 
 	allBirdnet := results.AllForStage("birdnet")
@@ -373,10 +373,7 @@ func buildHourlyBuckets(b *batch.Batch, results *pipeline.Results) map[int]*hour
 
 		for _, d := range fr.Detections {
 			// Approximate the detection hour: file start hour + offset seconds
-			detHour := baseHour + int(d.StartS/3600)
-			if detHour > 23 {
-				detHour = 23
-			}
+			detHour := min(baseHour+int(d.StartS/3600), 23)
 
 			if buckets[detHour] == nil {
 				buckets[detHour] = &hourlyBucket{species: make(map[string]bool)}

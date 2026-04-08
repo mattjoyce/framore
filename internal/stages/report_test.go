@@ -4,7 +4,6 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/mattjoyce/framore/internal/batch"
 	"github.com/mattjoyce/framore/internal/pipeline"
 )
 
@@ -102,8 +101,7 @@ func TestBuildHourlyBuckets(t *testing.T) {
 		},
 	})
 
-	b := &batch.Batch{}
-	buckets := buildHourlyBuckets(b, results)
+	buckets := buildHourlyBuckets(results)
 
 	if buckets[7] == nil {
 		t.Fatal("expected bucket for hour 7")
