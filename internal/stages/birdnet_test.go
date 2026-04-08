@@ -60,10 +60,10 @@ func TestWeekClamping(t *testing.T) {
 		date     string
 		wantWeek int
 	}{
-		{"2026-03-29", 13},  // normal week
-		{"2026-01-01", 1},   // week 1
-		{"2026-12-28", 48},  // week 53 → clamped to 48
-		{"2025-12-29", 1},   // week 1 of 2026
+		{"2026-03-29", 13}, // normal week
+		{"2026-01-01", 1},  // week 1
+		{"2026-12-28", 48}, // week 53 → clamped to 48
+		{"2025-12-29", 1},  // week 1 of 2026
 	}
 
 	for _, tt := range tests {

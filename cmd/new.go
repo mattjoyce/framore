@@ -26,7 +26,7 @@ var newCmd = &cobra.Command{
 
 		// Write template
 		tmpl := batch.DefaultBatchYAML(cfg)
-		if err := os.WriteFile(filename, []byte(tmpl), 0o644); err != nil {
+		if err := os.WriteFile(filename, []byte(tmpl), 0o600); err != nil {
 			return fmt.Errorf("write batch file: %w", err)
 		}
 

@@ -85,7 +85,7 @@ var configCmd = &cobra.Command{
 			}
 		}
 
-		gpsDesc := "Always enabled — builds timestamp→GPS map from photos"
+		var gpsDesc string
 		if imageCount == 0 {
 			gpsDesc = "No images in batch — use a plus code or enter GPS manually"
 		} else {

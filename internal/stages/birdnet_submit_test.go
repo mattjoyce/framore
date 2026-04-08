@@ -31,7 +31,7 @@ func TestBirdNetSubmitAllThenPoll(t *testing.T) {
 			"detections":      []any{map[string]any{"start_s": 0.0, "end_s": 3.0, "scientific_name": "Corvus coronoides", "common_name": "Australian Raven", "confidence": 0.85}},
 			"detection_count": 1,
 			"duration_s":      60.0,
-			"realtime_factor":  4.5,
+			"realtime_factor": 4.5,
 		}),
 		"job-002": mustJSON(t, map[string]any{
 			"status":          "ok",
@@ -39,7 +39,7 @@ func TestBirdNetSubmitAllThenPoll(t *testing.T) {
 			"detections":      []any{map[string]any{"start_s": 10.0, "end_s": 13.0, "scientific_name": "Gymnorhina tibicen", "common_name": "Australian Magpie", "confidence": 0.92}},
 			"detection_count": 1,
 			"duration_s":      60.0,
-			"realtime_factor":  5.0,
+			"realtime_factor": 5.0,
 		}),
 		"job-003": mustJSON(t, map[string]any{
 			"status":          "ok",
@@ -47,7 +47,7 @@ func TestBirdNetSubmitAllThenPoll(t *testing.T) {
 			"detections":      []any{},
 			"detection_count": 0,
 			"duration_s":      60.0,
-			"realtime_factor":  6.0,
+			"realtime_factor": 6.0,
 		}),
 	}
 
@@ -64,7 +64,7 @@ func TestBirdNetSubmitAllThenPoll(t *testing.T) {
 			// Submit endpoint
 			body, _ := io.ReadAll(r.Body)
 			var req map[string]any
-			json.Unmarshal(body, &req)
+			_ = json.Unmarshal(body, &req)
 
 			payload, _ := req["payload"].(map[string]any)
 			wavPath, _ := payload["wav_path"].(string)
@@ -80,7 +80,7 @@ func TestBirdNetSubmitAllThenPoll(t *testing.T) {
 
 			jobID := jobIDs[idx]
 			w.WriteHeader(http.StatusAccepted)
-			json.NewEncoder(w).Encode(map[string]any{
+			_ = json.NewEncoder(w).Encode(map[string]any{
 				"job_id":  jobID,
 				"status":  "queued",
 				"plugin":  "birda",
@@ -105,7 +105,7 @@ func TestBirdNetSubmitAllThenPoll(t *testing.T) {
 			}
 
 			w.WriteHeader(http.StatusOK)
-			json.NewEncoder(w).Encode(map[string]any{
+			_ = json.NewEncoder(w).Encode(map[string]any{
 				"job_id":  jobID,
 				"status":  status,
 				"plugin":  "birda",
@@ -135,8 +135,7 @@ func TestBirdNetSubmitAllThenPoll(t *testing.T) {
 		},
 	}
 
-	os.Setenv("TEST_DUCTILE_TOKEN", "test-token-123")
-	defer os.Unsetenv("TEST_DUCTILE_TOKEN")
+	t.Setenv("TEST_DUCTILE_TOKEN", "test-token-123")
 
 	b := &batch.Batch{
 		SessionDate: "2026-03-29",
@@ -163,9 +162,9 @@ func TestBirdNetSubmitAllThenPoll(t *testing.T) {
 	bn := &BirdNet{Cfg: cfg}
 	err := bn.Run(context.Background(), b, results)
 
-	w.Close()
+	_ = w.Close()
 	var buf bytes.Buffer
-	io.Copy(&buf, r)
+	_, _ = io.Copy(&buf, r)
 	os.Stdout = oldStdout
 	output := buf.String()
 
@@ -281,7 +280,7 @@ func TestBirdNetSubmitAllPartialFailure(t *testing.T) {
 			submitMu.Unlock()
 
 			w.WriteHeader(http.StatusAccepted)
-			json.NewEncoder(w).Encode(map[string]any{
+			_ = json.NewEncoder(w).Encode(map[string]any{
 				"job_id":  jobIDs[idx],
 				"status":  "queued",
 				"plugin":  "birda",
@@ -303,12 +302,12 @@ func TestBirdNetSubmitAllPartialFailure(t *testing.T) {
 					"detections":      []any{},
 					"detection_count": 0,
 					"duration_s":      30.0,
-					"realtime_factor":  3.0,
+					"realtime_factor": 3.0,
 				}
 			}
 
 			w.WriteHeader(http.StatusOK)
-			json.NewEncoder(w).Encode(map[string]any{
+			_ = json.NewEncoder(w).Encode(map[string]any{
 				"job_id": jobID,
 				"status": status,
 				"result": result,
@@ -332,8 +331,7 @@ func TestBirdNetSubmitAllPartialFailure(t *testing.T) {
 		},
 	}
 
-	os.Setenv("TEST_DUCTILE_TOKEN2", "test-token")
-	defer os.Unsetenv("TEST_DUCTILE_TOKEN2")
+	t.Setenv("TEST_DUCTILE_TOKEN2", "test-token")
 
 	b := &batch.Batch{
 		SessionDate: "2026-03-29",
@@ -391,7 +389,7 @@ func TestBirdNetSubmitNonAudioSkipped(t *testing.T) {
 			id := submits
 			submitMu.Unlock()
 			w.WriteHeader(http.StatusAccepted)
-			json.NewEncoder(w).Encode(map[string]any{
+			_ = json.NewEncoder(w).Encode(map[string]any{
 				"job_id": fmt.Sprintf("job-%d", id),
 				"status": "queued",
 			})
@@ -399,7 +397,7 @@ func TestBirdNetSubmitNonAudioSkipped(t *testing.T) {
 		}
 		if strings.HasPrefix(r.URL.Path, "/job/") {
 			w.WriteHeader(http.StatusOK)
-			json.NewEncoder(w).Encode(map[string]any{
+			_ = json.NewEncoder(w).Encode(map[string]any{
 				"job_id": strings.TrimPrefix(r.URL.Path, "/job/"),
 				"status": "succeeded",
 				"result": map[string]any{
@@ -408,7 +406,7 @@ func TestBirdNetSubmitNonAudioSkipped(t *testing.T) {
 					"detections":      []any{},
 					"detection_count": 0,
 					"duration_s":      10.0,
-					"realtime_factor":  2.0,
+					"realtime_factor": 2.0,
 				},
 			})
 			return
@@ -425,8 +423,7 @@ func TestBirdNetSubmitNonAudioSkipped(t *testing.T) {
 			AllowedPaths:   []string{"/Volumes/field_Recording"},
 		},
 	}
-	os.Setenv("TEST_SKIP_TOKEN", "tok")
-	defer os.Unsetenv("TEST_SKIP_TOKEN")
+	t.Setenv("TEST_SKIP_TOKEN", "tok")
 
 	b := &batch.Batch{
 		SessionDate: "2026-03-29",

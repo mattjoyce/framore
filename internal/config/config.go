@@ -8,12 +8,12 @@ import (
 )
 
 type Config struct {
-	CurrentBatch string   `toml:"current_batch"`
-	Defaults     Defaults `toml:"defaults"`
-	Paths        Paths    `toml:"paths"`
-	Services     Services `toml:"services"`
+	CurrentBatch string        `toml:"current_batch"`
+	Defaults     Defaults      `toml:"defaults"`
+	Paths        Paths         `toml:"paths"`
+	Services     Services      `toml:"services"`
 	Weather      WeatherConfig `toml:"weather"`
-	Output       Output   `toml:"output"`
+	Output       Output        `toml:"output"`
 }
 
 type Defaults struct {
@@ -29,10 +29,10 @@ type Paths struct {
 }
 
 type Services struct {
-	DuctileAPIURL    string `toml:"ductile_api_url"`
-	DuctileTokenEnv  string `toml:"ductile_token_env"`
-	OllamaURL        string `toml:"ollama_url"`
-	WhisperURL       string `toml:"whisper_url"`
+	DuctileAPIURL   string `toml:"ductile_api_url"`
+	DuctileTokenEnv string `toml:"ductile_token_env"`
+	OllamaURL       string `toml:"ollama_url"`
+	WhisperURL      string `toml:"whisper_url"`
 }
 
 type WeatherConfig struct {
@@ -150,7 +150,7 @@ func (c *Config) Save() error {
 // SaveConfig writes the config to disk, creating the directory if needed.
 func SaveConfig(cfg *Config) error {
 	dir := ConfigDir()
-	if err := os.MkdirAll(dir, 0o755); err != nil {
+	if err := os.MkdirAll(dir, 0o750); err != nil {
 		return err
 	}
 
@@ -159,5 +159,5 @@ func SaveConfig(cfg *Config) error {
 		return err
 	}
 
-	return os.WriteFile(ConfigPath(), data, 0o644)
+	return os.WriteFile(ConfigPath(), data, 0o600)
 }

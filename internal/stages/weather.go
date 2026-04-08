@@ -162,9 +162,9 @@ func (w *Weather) Run(ctx context.Context, b *batch.Batch, results *pipeline.Res
 	}
 
 	// Cache the result
-	if err := os.MkdirAll(cacheDir, 0o755); err == nil {
+	if err := os.MkdirAll(cacheDir, 0o750); err == nil {
 		cacheData, _ := json.MarshalIndent(result, "", "  ")
-		os.WriteFile(cacheFile, cacheData, 0o644)
+		_ = os.WriteFile(cacheFile, cacheData, 0o600)
 	}
 
 	results.Set("weather", "session", result)

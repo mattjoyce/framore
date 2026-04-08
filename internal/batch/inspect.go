@@ -12,11 +12,11 @@ import (
 // InspectWAV reads WAV file metadata and returns a FileMeta with duration,
 // bit depth, sample rate, channels, and file size populated.
 func InspectWAV(path string) (FileMeta, error) {
-	f, err := os.Open(path)
+	f, err := os.Open(path) // #nosec G304 — path comes from user's batch file
 	if err != nil {
 		return FileMeta{}, err
 	}
-	defer f.Close()
+	defer func() { _ = f.Close() }()
 
 	dec := wav.NewDecoder(f)
 	if !dec.IsValidFile() {
@@ -48,11 +48,11 @@ func InspectWAV(path string) (FileMeta, error) {
 // with datetime, GPS coordinates, altitude, and device name populated.
 // Missing EXIF fields are silently ignored (zero values used).
 func InspectImage(path string) (FileMeta, error) {
-	f, err := os.Open(path)
+	f, err := os.Open(path) // #nosec G304 — path comes from user's batch file
 	if err != nil {
 		return FileMeta{}, err
 	}
-	defer f.Close()
+	defer func() { _ = f.Close() }()
 
 	x, err := exif.Decode(f)
 	if err != nil {

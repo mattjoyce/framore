@@ -66,7 +66,7 @@ func (c *Client) Submit(ctx context.Context, plugin, command string, payload any
 	if err != nil {
 		return nil, fmt.Errorf("http post: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	respBody, err := io.ReadAll(resp.Body)
 	if err != nil {
@@ -97,7 +97,7 @@ func (c *Client) GetJob(ctx context.Context, jobID string) (*JobResponse, error)
 	if err != nil {
 		return nil, fmt.Errorf("http get: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	respBody, err := io.ReadAll(resp.Body)
 	if err != nil {
@@ -148,7 +148,7 @@ func (c *Client) ListJobs(ctx context.Context, plugin string, limit int) (*ListJ
 	if err != nil {
 		return nil, fmt.Errorf("http get: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	respBody, err := io.ReadAll(resp.Body)
 	if err != nil {

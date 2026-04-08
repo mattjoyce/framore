@@ -55,7 +55,7 @@ func (r *Report) Run(ctx context.Context, b *batch.Batch, results *pipeline.Resu
 	// Write report to session folder
 	outPath := filepath.Join(b.SessionDir, "session_report.md")
 	report := formatReport(b, response)
-	if err := os.WriteFile(outPath, []byte(report), 0o644); err != nil {
+	if err := os.WriteFile(outPath, []byte(report), 0o600); err != nil { // #nosec G306
 		return fmt.Errorf("write report: %w", err)
 	}
 
@@ -71,8 +71,8 @@ func loadPromptTemplate() string {
 	data, err := os.ReadFile(path)
 	if err != nil {
 		// Write default so the user can edit it
-		os.MkdirAll(config.ConfigDir(), 0o755)
-		os.WriteFile(path, []byte(defaultReportPrompt+"\n"), 0o644)
+		_ = os.MkdirAll(config.ConfigDir(), 0o750)
+		_ = os.WriteFile(path, []byte(defaultReportPrompt+"\n"), 0o600)
 		fmt.Printf("  [report] created prompt template: %s\n", path)
 		return defaultReportPrompt
 	}
@@ -87,11 +87,11 @@ func buildDataContext(b *batch.Batch, results *pipeline.Results) string {
 	var sb strings.Builder
 
 	// Session info
-	sb.WriteString(fmt.Sprintf("## Session\n- Date: %s\n- Location: %s\n", b.SessionDate, b.SessionDir))
+	fmt.Fprintf(&sb, "## Session\n- Date: %s\n- Location: %s\n", b.SessionDate, b.SessionDir)
 	if b.Pipeline.PlusCode != "" {
-		sb.WriteString(fmt.Sprintf("- Plus code: %s\n", b.Pipeline.PlusCode))
+		fmt.Fprintf(&sb, "- Plus code: %s\n", b.Pipeline.PlusCode)
 	}
-	sb.WriteString(fmt.Sprintf("- GPS: %.4f, %.4f\n", b.Pipeline.DefaultLat, b.Pipeline.DefaultLon))
+	fmt.Fprintf(&sb, "- GPS: %.4f, %.4f\n", b.Pipeline.DefaultLat, b.Pipeline.DefaultLon)
 
 	// File summary
 	audioCount := 0
@@ -102,13 +102,13 @@ func buildDataContext(b *batch.Batch, results *pipeline.Results) string {
 			totalDuration += f.Meta.DurationSeconds
 		}
 	}
-	sb.WriteString(fmt.Sprintf("- Audio files: %d (%.1f hours total)\n\n", audioCount, totalDuration/3600))
+	fmt.Fprintf(&sb, "- Audio files: %d (%.1f hours total)\n\n", audioCount, totalDuration/3600)
 
 	// Weather
 	if raw, ok := results.Get("weather", "session"); ok {
 		if wr, ok := raw.(WeatherResult); ok {
 			sb.WriteString("## Weather\n")
-			sb.WriteString(fmt.Sprintf("- Sunrise: %s\n- Sunset: %s\n", wr.Sunrise, wr.Sunset))
+			fmt.Fprintf(&sb, "- Sunrise: %s\n- Sunset: %s\n", wr.Sunrise, wr.Sunset)
 
 			if len(wr.Hourly) > 0 {
 				var minT, maxT float64 = 100, -100
@@ -126,9 +126,9 @@ func buildDataContext(b *batch.Batch, results *pipeline.Results) string {
 						maxWind = h.WindSpeed
 					}
 				}
-				sb.WriteString(fmt.Sprintf("- Temperature: %.1f–%.1f°C\n", minT, maxT))
-				sb.WriteString(fmt.Sprintf("- Total precipitation: %.1f mm\n", totalPrecip))
-				sb.WriteString(fmt.Sprintf("- Max wind: %.1f km/h\n", maxWind))
+				fmt.Fprintf(&sb, "- Temperature: %.1f–%.1f°C\n", minT, maxT)
+				fmt.Fprintf(&sb, "- Total precipitation: %.1f mm\n", totalPrecip)
+				fmt.Fprintf(&sb, "- Max wind: %.1f km/h\n", maxWind)
 			}
 			sb.WriteString("\n")
 		}
@@ -138,8 +138,8 @@ func buildDataContext(b *batch.Batch, results *pipeline.Results) string {
 	if raw, ok := results.Get("birdnet", "session"); ok {
 		if sr, ok := raw.(SessionBirdNetResult); ok {
 			sb.WriteString("## BirdNET Detections\n")
-			sb.WriteString(fmt.Sprintf("- Total detections: %d across %d files\n", sr.TotalDetections, sr.TotalFiles))
-			sb.WriteString(fmt.Sprintf("- Species count: %d\n\n", len(sr.Species)))
+			fmt.Fprintf(&sb, "- Total detections: %d across %d files\n", sr.TotalDetections, sr.TotalFiles)
+			fmt.Fprintf(&sb, "- Species count: %d\n\n", len(sr.Species))
 
 			// Sort by total detections descending
 			sorted := make([]SpeciesSummary, len(sr.Species))
@@ -155,8 +155,8 @@ func buildDataContext(b *batch.Batch, results *pipeline.Results) string {
 				if s.ScientificName != "" {
 					name = fmt.Sprintf("%s (%s)", s.CommonName, s.ScientificName)
 				}
-				sb.WriteString(fmt.Sprintf("| %s | %d | %d | %.1f%% | %.0fs–%.0fs |\n",
-					name, s.TotalDetections, s.FileCount, s.MaxConfidence*100, s.FirstSeenS, s.LastSeenS))
+				fmt.Fprintf(&sb, "| %s | %d | %d | %.1f%% | %.0fs–%.0fs |\n",
+					name, s.TotalDetections, s.FileCount, s.MaxConfidence*100, s.FirstSeenS, s.LastSeenS)
 			}
 			sb.WriteString("\n")
 		}
@@ -168,13 +168,13 @@ func buildDataContext(b *batch.Batch, results *pipeline.Results) string {
 func formatReport(b *batch.Batch, narrative string) string {
 	var sb strings.Builder
 
-	sb.WriteString(fmt.Sprintf("# Session Report: %s\n\n", b.SessionDate))
-	sb.WriteString(fmt.Sprintf("**Generated:** %s  \n", time.Now().Format("2006-01-02 15:04:05")))
-	sb.WriteString(fmt.Sprintf("**Session:** %s  \n", filepath.Base(b.SessionDir)))
+	fmt.Fprintf(&sb, "# Session Report: %s\n\n", b.SessionDate)
+	fmt.Fprintf(&sb, "**Generated:** %s  \n", time.Now().Format("2006-01-02 15:04:05"))
+	fmt.Fprintf(&sb, "**Session:** %s  \n", filepath.Base(b.SessionDir))
 	if b.Pipeline.PlusCode != "" {
-		sb.WriteString(fmt.Sprintf("**Location:** %s (%.4f, %.4f)  \n", b.Pipeline.PlusCode, b.Pipeline.DefaultLat, b.Pipeline.DefaultLon))
+		fmt.Fprintf(&sb, "**Location:** %s (%.4f, %.4f)  \n", b.Pipeline.PlusCode, b.Pipeline.DefaultLat, b.Pipeline.DefaultLon)
 	} else {
-		sb.WriteString(fmt.Sprintf("**Location:** %.4f, %.4f  \n", b.Pipeline.DefaultLat, b.Pipeline.DefaultLon))
+		fmt.Fprintf(&sb, "**Location:** %.4f, %.4f  \n", b.Pipeline.DefaultLat, b.Pipeline.DefaultLon)
 	}
 	sb.WriteString("\n---\n\n")
 	sb.WriteString(narrative)

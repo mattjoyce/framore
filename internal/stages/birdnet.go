@@ -38,21 +38,21 @@ type BirdNetFileResult struct {
 
 // SpeciesSummary is one row in the session-unified species list.
 type SpeciesSummary struct {
-	ScientificName string  `json:"scientific_name"`
-	CommonName     string  `json:"common_name"`
-	MaxConfidence  float64 `json:"max_confidence"`
-	TotalDetections int    `json:"total_detections"`
-	FileCount      int     `json:"file_count"`
-	FirstSeenS     float64 `json:"first_seen_s"`
-	LastSeenS      float64 `json:"last_seen_s"`
+	ScientificName  string  `json:"scientific_name"`
+	CommonName      string  `json:"common_name"`
+	MaxConfidence   float64 `json:"max_confidence"`
+	TotalDetections int     `json:"total_detections"`
+	FileCount       int     `json:"file_count"`
+	FirstSeenS      float64 `json:"first_seen_s"`
+	LastSeenS       float64 `json:"last_seen_s"`
 }
 
 // SessionBirdNetResult is the unified result across all files.
 type SessionBirdNetResult struct {
-	Species        []SpeciesSummary    `json:"species"`
-	TotalFiles     int                 `json:"total_files"`
-	TotalDetections int               `json:"total_detections"`
-	FileResults    []BirdNetFileResult `json:"file_results"`
+	Species         []SpeciesSummary    `json:"species"`
+	TotalFiles      int                 `json:"total_files"`
+	TotalDetections int                 `json:"total_detections"`
+	FileResults     []BirdNetFileResult `json:"file_results"`
 }
 
 // pendingJob tracks a submitted Ductile job awaiting completion.
@@ -66,7 +66,6 @@ type pollProgress struct {
 	total      int
 	completed  int
 	failed     int
-	skipped    int
 	detections int
 	species    map[string]bool
 	started    time.Time

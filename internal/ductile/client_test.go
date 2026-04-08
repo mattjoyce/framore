@@ -36,7 +36,7 @@ func TestSubmit(t *testing.T) {
 		}
 
 		w.WriteHeader(http.StatusAccepted)
-		json.NewEncoder(w).Encode(SubmitResponse{
+		_ = json.NewEncoder(w).Encode(SubmitResponse{
 			JobID:   "job-123",
 			Status:  "queued",
 			Plugin:  "birda",
@@ -65,7 +65,7 @@ func TestGetJob(t *testing.T) {
 			t.Errorf("path: got %s", r.URL.Path)
 		}
 		w.WriteHeader(http.StatusOK)
-		json.NewEncoder(w).Encode(map[string]any{
+		_ = json.NewEncoder(w).Encode(map[string]any{
 			"job_id":  "job-123",
 			"status":  "succeeded",
 			"plugin":  "birda",
@@ -94,7 +94,7 @@ func TestWaitForJob(t *testing.T) {
 			status = "succeeded"
 		}
 		w.WriteHeader(http.StatusOK)
-		json.NewEncoder(w).Encode(map[string]any{
+		_ = json.NewEncoder(w).Encode(map[string]any{
 			"job_id": "job-456",
 			"status": status,
 			"result": map[string]any{"status": "ok"},

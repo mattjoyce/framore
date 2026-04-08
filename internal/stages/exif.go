@@ -40,7 +40,7 @@ func (e *EXIF) Run(ctx context.Context, b *batch.Batch, results *pipeline.Result
 		}
 
 		x, err := exif.Decode(file)
-		file.Close()
+		_ = file.Close()
 		if err != nil {
 			fmt.Printf("  [exif] no EXIF in %s: %v\n", f.Path, err)
 			continue

@@ -24,7 +24,7 @@ var queueCmd = &cobra.Command{
 		if err != nil {
 			return fmt.Errorf("ductile unreachable at %s: %w", cfg.Services.DuctileAPIURL, err)
 		}
-		healthResp.Body.Close()
+		_ = healthResp.Body.Close()
 
 		token := os.Getenv(cfg.Services.DuctileTokenEnv)
 		if token == "" {
