@@ -13,7 +13,12 @@ type Config struct {
 	Paths        Paths         `toml:"paths"`
 	Services     Services      `toml:"services"`
 	Weather      WeatherConfig `toml:"weather"`
+	Report       ReportConfig  `toml:"report"`
 	Output       Output        `toml:"output"`
+}
+
+type ReportConfig struct {
+	PromptFile string `toml:"prompt_file"`
 }
 
 type Defaults struct {
@@ -83,6 +88,9 @@ func DefaultConfig() *Config {
 			CacheMaxAgeDays: 30,
 			TimeoutSeconds:  30,
 		},
+		Report: ReportConfig{
+			PromptFile: "report_prompt.md",
+		},
 		Output: Output{
 			LogLevel: "info",
 		},
@@ -137,6 +145,9 @@ func Load() (*Config, error) {
 	}
 	if len(cfg.Paths.AllowedPaths) == 0 {
 		cfg.Paths.AllowedPaths = defaults.Paths.AllowedPaths
+	}
+	if cfg.Report.PromptFile == "" {
+		cfg.Report.PromptFile = defaults.Report.PromptFile
 	}
 
 	return &cfg, nil

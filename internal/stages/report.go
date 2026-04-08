@@ -40,7 +40,7 @@ func (r *Report) Name() string { return "report" }
 func (r *Report) Enabled(b *batch.Batch) bool { return b.Stages.Report }
 
 func (r *Report) Run(ctx context.Context, b *batch.Batch, results *pipeline.Results) error {
-	systemPrompt := loadPromptTemplate()
+	systemPrompt := loadPromptTemplate(r.Cfg.Report.PromptFile)
 	dataContext := buildDataContext(b, results)
 	prompt := systemPrompt + "\n\nHere is the session data:\n\n" + dataContext
 
@@ -64,10 +64,10 @@ func (r *Report) Run(ctx context.Context, b *batch.Batch, results *pipeline.Resu
 	return nil
 }
 
-// loadPromptTemplate reads the report prompt from ~/.config/framore/report_prompt.md.
+// loadPromptTemplate reads the report prompt from the config directory.
 // If the file doesn't exist, writes the built-in default and returns it.
-func loadPromptTemplate() string {
-	path := filepath.Join(config.ConfigDir(), "report_prompt.md")
+func loadPromptTemplate(filename string) string {
+	path := filepath.Join(config.ConfigDir(), filename)
 	data, err := os.ReadFile(path) // #nosec G304 — path is user's config dir
 	if err != nil {
 		// Write default so the user can edit it
