@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 
@@ -16,6 +17,14 @@ import (
 )
 
 const defaultModel = "gemma3:4b"
+
+// largeSessionThreshold is the detection count above which the report
+// uses summarised context (top-N species, hourly bucketing, two-pass).
+const largeSessionThreshold = 5000
+
+// topSpeciesLimit is the maximum number of species sent to the LLM
+// for large sessions.
+const topSpeciesLimit = 20
 
 const defaultReportPrompt = `You are a field naturalist writing a concise session report for a bioacoustic recording session.
 
@@ -41,15 +50,43 @@ func (r *Report) Enabled(b *batch.Batch) bool { return b.Stages.Report }
 
 func (r *Report) Run(ctx context.Context, b *batch.Batch, results *pipeline.Results) error {
 	systemPrompt := loadPromptTemplate(r.Cfg.Report.PromptFile)
-	dataContext := buildDataContext(b, results)
-	prompt := systemPrompt + "\n\nHere is the session data:\n\n" + dataContext
-
-	fmt.Printf("  [report] generating narrative via ollama (%s)…\n", defaultModel)
-
 	client := ollama.NewClient(r.Cfg.Services.OllamaURL)
-	response, err := client.Generate(ctx, defaultModel, prompt)
-	if err != nil {
-		return fmt.Errorf("ollama generate: %w", err)
+
+	isLarge := isLargeSession(results)
+	var response string
+
+	if isLarge {
+		fmt.Printf("  [report] large session detected — using two-pass generation\n")
+
+		// Pass 1: per-species summaries
+		speciesContext := buildSpeciesSummaryContext(b, results)
+		pass1Prompt := "You are a field naturalist. Write a brief 1-2 sentence summary for each of the following species detected in this bioacoustic recording session. Focus on detection frequency, confidence levels, and any notable patterns.\n\n" + speciesContext
+
+		fmt.Printf("  [report] pass 1: species summaries via ollama (%s)…\n", defaultModel)
+		speciesSummaries, err := client.Generate(ctx, defaultModel, pass1Prompt)
+		if err != nil {
+			return fmt.Errorf("ollama pass 1: %w", err)
+		}
+
+		// Pass 2: synthesise narrative using summaries + compact context
+		dataContext := buildLargeSessionContext(b, results)
+		pass2Prompt := systemPrompt + "\n\nHere is the session data (summarised for a large recording set):\n\n" + dataContext + "\n\n## Species Summaries (from analysis pass)\n\n" + speciesSummaries
+
+		fmt.Printf("  [report] pass 2: narrative synthesis via ollama (%s)…\n", defaultModel)
+		response, err = client.Generate(ctx, defaultModel, pass2Prompt)
+		if err != nil {
+			return fmt.Errorf("ollama pass 2: %w", err)
+		}
+	} else {
+		dataContext := buildDataContext(b, results)
+		prompt := systemPrompt + "\n\nHere is the session data:\n\n" + dataContext
+
+		fmt.Printf("  [report] generating narrative via ollama (%s)…\n", defaultModel)
+		var err error
+		response, err = client.Generate(ctx, defaultModel, prompt)
+		if err != nil {
+			return fmt.Errorf("ollama generate: %w", err)
+		}
 	}
 
 	// Write report to session folder
@@ -62,6 +99,19 @@ func (r *Report) Run(ctx context.Context, b *batch.Batch, results *pipeline.Resu
 	results.Set("report", "session", outPath)
 	fmt.Printf("  [report] written to %s\n", outPath)
 	return nil
+}
+
+// isLargeSession checks if the birdnet session result exceeds the large session threshold.
+func isLargeSession(results *pipeline.Results) bool {
+	raw, ok := results.Get("birdnet", "session")
+	if !ok {
+		return false
+	}
+	sr, ok := raw.(SessionBirdNetResult)
+	if !ok {
+		return false
+	}
+	return sr.TotalDetections >= largeSessionThreshold
 }
 
 // loadPromptTemplate reads the report prompt from the config directory.
@@ -137,32 +187,224 @@ func buildDataContext(b *batch.Batch, results *pipeline.Results) string {
 	// BirdNET detections
 	if raw, ok := results.Get("birdnet", "session"); ok {
 		if sr, ok := raw.(SessionBirdNetResult); ok {
-			sb.WriteString("## BirdNET Detections\n")
-			fmt.Fprintf(&sb, "- Total detections: %d across %d files\n", sr.TotalDetections, sr.TotalFiles)
-			fmt.Fprintf(&sb, "- Species count: %d\n\n", len(sr.Species))
+			writeBirdNETSection(&sb, sr, 0) // 0 = no limit (show all)
+		}
+	}
 
-			// Sort by total detections descending
-			sorted := make([]SpeciesSummary, len(sr.Species))
-			copy(sorted, sr.Species)
-			sort.Slice(sorted, func(i, j int) bool {
-				return sorted[i].TotalDetections > sorted[j].TotalDetections
-			})
+	return sb.String()
+}
 
-			sb.WriteString("| Species | Detections | Files | Max Confidence | Time Range |\n")
-			sb.WriteString("|---------|-----------|-------|---------------|------------|\n")
-			for _, s := range sorted {
-				name := s.CommonName
-				if s.ScientificName != "" {
-					name = fmt.Sprintf("%s (%s)", s.CommonName, s.ScientificName)
+// writeBirdNETSection writes the BirdNET detections table. If limit > 0,
+// only the top N species by detection count are included and the rest noted.
+func writeBirdNETSection(sb *strings.Builder, sr SessionBirdNetResult, limit int) {
+	sb.WriteString("## BirdNET Detections\n")
+	fmt.Fprintf(sb, "- Total detections: %d across %d files\n", sr.TotalDetections, sr.TotalFiles)
+	fmt.Fprintf(sb, "- Species count: %d\n\n", len(sr.Species))
+
+	sorted := make([]SpeciesSummary, len(sr.Species))
+	copy(sorted, sr.Species)
+	sort.Slice(sorted, func(i, j int) bool {
+		return sorted[i].TotalDetections > sorted[j].TotalDetections
+	})
+
+	show := sorted
+	remainder := 0
+	if limit > 0 && len(sorted) > limit {
+		show = sorted[:limit]
+		remainder = len(sorted) - limit
+	}
+
+	sb.WriteString("| Species | Detections | Files | Max Confidence | Time Range |\n")
+	sb.WriteString("|---------|-----------|-------|---------------|------------|\n")
+	for _, s := range show {
+		name := s.CommonName
+		if s.ScientificName != "" {
+			name = fmt.Sprintf("%s (%s)", s.CommonName, s.ScientificName)
+		}
+		fmt.Fprintf(sb, "| %s | %d | %d | %.1f%% | %.0fs–%.0fs |\n",
+			name, s.TotalDetections, s.FileCount, s.MaxConfidence*100, s.FirstSeenS, s.LastSeenS)
+	}
+
+	if remainder > 0 {
+		fmt.Fprintf(sb, "\n*…and %d more species with fewer detections*\n", remainder)
+	}
+	sb.WriteString("\n")
+}
+
+// buildSpeciesSummaryContext creates a concise species list for the first
+// LLM pass in two-pass generation.
+func buildSpeciesSummaryContext(b *batch.Batch, results *pipeline.Results) string {
+	var sb strings.Builder
+
+	fmt.Fprintf(&sb, "Session: %s on %s\n\n", filepath.Base(b.SessionDir), b.SessionDate)
+
+	raw, ok := results.Get("birdnet", "session")
+	if !ok {
+		return sb.String()
+	}
+	sr, ok := raw.(SessionBirdNetResult)
+	if !ok {
+		return sb.String()
+	}
+
+	sorted := make([]SpeciesSummary, len(sr.Species))
+	copy(sorted, sr.Species)
+	sort.Slice(sorted, func(i, j int) bool {
+		return sorted[i].TotalDetections > sorted[j].TotalDetections
+	})
+
+	show := sorted
+	if len(sorted) > topSpeciesLimit {
+		show = sorted[:topSpeciesLimit]
+	}
+
+	for i, s := range show {
+		name := s.CommonName
+		if s.ScientificName != "" {
+			name = fmt.Sprintf("%s (%s)", s.CommonName, s.ScientificName)
+		}
+		fmt.Fprintf(&sb, "%d. %s — %d detections across %d files, max confidence %.0f%%\n",
+			i+1, name, s.TotalDetections, s.FileCount, s.MaxConfidence*100)
+	}
+
+	return sb.String()
+}
+
+// buildLargeSessionContext creates a compact data context for large sessions
+// with top-N species and hourly activity bucketing.
+func buildLargeSessionContext(b *batch.Batch, results *pipeline.Results) string {
+	var sb strings.Builder
+
+	// Session info (same as normal)
+	fmt.Fprintf(&sb, "## Session\n- Date: %s\n- Location: %s\n", b.SessionDate, b.SessionDir)
+	if b.Pipeline.PlusCode != "" {
+		fmt.Fprintf(&sb, "- Plus code: %s\n", b.Pipeline.PlusCode)
+	}
+	fmt.Fprintf(&sb, "- GPS: %.4f, %.4f\n", b.Pipeline.DefaultLat, b.Pipeline.DefaultLon)
+
+	audioCount := 0
+	var totalDuration float64
+	for _, f := range b.Files {
+		if f.Type == "audio" {
+			audioCount++
+			totalDuration += f.Meta.DurationSeconds
+		}
+	}
+	fmt.Fprintf(&sb, "- Audio files: %d (%.1f hours total)\n\n", audioCount, totalDuration/3600)
+
+	// Weather (same as normal)
+	if raw, ok := results.Get("weather", "session"); ok {
+		if wr, ok := raw.(WeatherResult); ok {
+			sb.WriteString("## Weather\n")
+			fmt.Fprintf(&sb, "- Sunrise: %s\n- Sunset: %s\n", wr.Sunrise, wr.Sunset)
+			if len(wr.Hourly) > 0 {
+				var minT, maxT float64 = 100, -100
+				for _, h := range wr.Hourly {
+					if h.Temperature < minT {
+						minT = h.Temperature
+					}
+					if h.Temperature > maxT {
+						maxT = h.Temperature
+					}
 				}
-				fmt.Fprintf(&sb, "| %s | %d | %d | %.1f%% | %.0fs–%.0fs |\n",
-					name, s.TotalDetections, s.FileCount, s.MaxConfidence*100, s.FirstSeenS, s.LastSeenS)
+				fmt.Fprintf(&sb, "- Temperature: %.1f–%.1f°C\n", minT, maxT)
 			}
 			sb.WriteString("\n")
 		}
 	}
 
+	// BirdNET with top-N limit
+	if raw, ok := results.Get("birdnet", "session"); ok {
+		if sr, ok := raw.(SessionBirdNetResult); ok {
+			writeBirdNETSection(&sb, sr, topSpeciesLimit)
+
+			// Hourly activity bucketing
+			hourlyActivity := buildHourlyBuckets(b, results)
+			if len(hourlyActivity) > 0 {
+				sb.WriteString("## Hourly Activity\n")
+				sb.WriteString("| Hour | Detections | Species |\n")
+				sb.WriteString("|------|-----------|--------|\n")
+
+				hours := make([]int, 0, len(hourlyActivity))
+				for h := range hourlyActivity {
+					hours = append(hours, h)
+				}
+				sort.Ints(hours)
+
+				for _, h := range hours {
+					bucket := hourlyActivity[h]
+					fmt.Fprintf(&sb, "| %02d:00 | %d | %d |\n", h, bucket.detections, len(bucket.species))
+				}
+				sb.WriteString("\n")
+			}
+
+			_ = sr // used above
+		}
+	}
+
 	return sb.String()
+}
+
+type hourlyBucket struct {
+	detections int
+	species    map[string]bool
+}
+
+// buildHourlyBuckets aggregates detections into hourly bins based on
+// the F3 filename convention (HHMMSS_NNNN.WAV) and detection offset.
+func buildHourlyBuckets(b *batch.Batch, results *pipeline.Results) map[int]*hourlyBucket {
+	buckets := make(map[int]*hourlyBucket)
+
+	allBirdnet := results.AllForStage("birdnet")
+	for key, val := range allBirdnet {
+		if key == "session" {
+			continue
+		}
+		fr, ok := val.(BirdNetFileResult)
+		if !ok {
+			continue
+		}
+
+		// Try to parse hour from F3 filename
+		baseHour := parseF3Hour(filepath.Base(fr.FilePath))
+		if baseHour < 0 {
+			continue
+		}
+
+		for _, d := range fr.Detections {
+			// Approximate the detection hour: file start hour + offset seconds
+			detHour := baseHour + int(d.StartS/3600)
+			if detHour > 23 {
+				detHour = 23
+			}
+
+			if buckets[detHour] == nil {
+				buckets[detHour] = &hourlyBucket{species: make(map[string]bool)}
+			}
+			buckets[detHour].detections++
+			buckets[detHour].species[d.ScientificName] = true
+		}
+	}
+
+	return buckets
+}
+
+// parseF3Hour extracts the hour from an F3 filename like "221053_0001.WAV".
+// Returns -1 if the filename doesn't match the expected format.
+func parseF3Hour(filename string) int {
+	// F3 format: HHMMSS_NNNN.WAV
+	if len(filename) < 6 {
+		return -1
+	}
+	hh, err := strconv.Atoi(filename[:2])
+	if err != nil || hh < 0 || hh > 23 {
+		return -1
+	}
+	// Verify the rest looks like F3 format
+	if len(filename) >= 7 && filename[6] != '_' {
+		return -1
+	}
+	return hh
 }
 
 func formatReport(b *batch.Batch, narrative string) string {
