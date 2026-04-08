@@ -32,6 +32,7 @@ type Services struct {
 	DuctileAPIURL    string `toml:"ductile_api_url"`
 	DuctileTokenEnv  string `toml:"ductile_token_env"`
 	OllamaURL        string `toml:"ollama_url"`
+	WhisperURL       string `toml:"whisper_url"`
 }
 
 type WeatherConfig struct {
@@ -75,6 +76,7 @@ func DefaultConfig() *Config {
 			DuctileAPIURL:   "http://192.168.20.4:8888",
 			DuctileTokenEnv: "FRAMORE_DUCTILE_TOKEN",
 			OllamaURL:       "http://192.168.20.4:11434",
+			WhisperURL:      "http://192.168.20.4:8765",
 		},
 		Weather: WeatherConfig{
 			CacheDir:        "~/.cache/framore/weather",
@@ -126,6 +128,9 @@ func Load() (*Config, error) {
 	}
 	if cfg.Services.OllamaURL == "" {
 		cfg.Services.OllamaURL = defaults.Services.OllamaURL
+	}
+	if cfg.Services.WhisperURL == "" {
+		cfg.Services.WhisperURL = defaults.Services.WhisperURL
 	}
 	if cfg.Paths.ProcessingRoot == "" {
 		cfg.Paths.ProcessingRoot = defaults.Paths.ProcessingRoot
