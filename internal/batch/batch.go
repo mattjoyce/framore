@@ -11,6 +11,7 @@ type Batch struct {
 	SessionDate string             `yaml:"session_date"`
 	Stages      StageConfig        `yaml:"stages"`
 	BirdNet     BirdNetConfig      `yaml:"birdnet"`
+	Transcribe  TranscribeConfig   `yaml:"transcribe"`
 	Weather     WeatherStageConfig `yaml:"weather"`
 	Pipeline    PipelineConfig     `yaml:"pipeline"`
 	Files       []FileEntry        `yaml:"files"`
@@ -27,6 +28,11 @@ type StageConfig struct {
 type BirdNetConfig struct {
 	MinConf      float64 `yaml:"min_conf"`
 	SkipExisting bool    `yaml:"skip_existing"`
+}
+
+type TranscribeConfig struct {
+	DurationSeconds int    `yaml:"duration_seconds"`
+	Language        string `yaml:"language,omitempty"`
 }
 
 type WeatherStageConfig struct {

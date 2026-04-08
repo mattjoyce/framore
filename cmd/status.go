@@ -59,7 +59,11 @@ var statusCmd = &cobra.Command{
 			fmt.Sprintf("timezone=%s", b.Weather.Timezone))
 		printStage("birdnet", "→ ductile", b.Stages.BirdNet, false,
 			fmt.Sprintf("min_conf=%.1f", b.BirdNet.MinConf))
-		printStage("transcribe", "deferred", false, true, "")
+		transcribeDetail := fmt.Sprintf("duration=%ds", b.Transcribe.DurationSeconds)
+		if b.Transcribe.Language != "" {
+			transcribeDetail += fmt.Sprintf(" lang=%s", b.Transcribe.Language)
+		}
+		printStage("transcribe", "→ whisper", b.Stages.Transcribe, false, transcribeDetail)
 		printStage("report", "→ ollama", b.Stages.Report, false,
 			cfg.Services.OllamaURL)
 

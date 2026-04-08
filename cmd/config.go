@@ -157,11 +157,37 @@ var configCmd = &cobra.Command{
 				}),
 		)
 
-		// ── Transcription group (deferred) ──
+		enableTranscribe := b.Stages.Transcribe
+		transcribeDurStr := fmt.Sprintf("%d", b.Transcribe.DurationSeconds)
+		if b.Transcribe.DurationSeconds == 0 {
+			transcribeDurStr = "60"
+		}
+		transcribeLang := b.Transcribe.Language
+
+		// ── Transcription group ──
 		transcribeGroup := huh.NewGroup(
 			huh.NewNote().
 				Title("── Transcription ────────────────────────").
-				Description("Deferred — faster-whisper container not yet available"),
+				Description(fmt.Sprintf("Uses faster-whisper at %s", cfg.Services.WhisperURL)),
+			huh.NewConfirm().
+				Title("Enable transcription?").
+				Value(&enableTranscribe),
+			huh.NewInput().
+				Title("Duration (seconds from start/end of each file)").
+				Value(&transcribeDurStr).
+				Validate(func(s string) error {
+					v, err := strconv.Atoi(s)
+					if err != nil {
+						return fmt.Errorf("must be an integer")
+					}
+					if v < 1 {
+						return fmt.Errorf("must be at least 1")
+					}
+					return nil
+				}),
+			huh.NewInput().
+				Title("Language (blank for auto-detect, or 'en', 'de', etc)").
+				Value(&transcribeLang),
 		)
 
 		// ── Report group ──
@@ -225,6 +251,9 @@ var configCmd = &cobra.Command{
 		b.Stages.BirdNet = enableBirdNet
 		b.BirdNet.MinConf, _ = strconv.ParseFloat(minConfStr, 64)
 		b.BirdNet.SkipExisting = skipExisting
+		b.Stages.Transcribe = enableTranscribe
+		b.Transcribe.DurationSeconds, _ = strconv.Atoi(transcribeDurStr)
+		b.Transcribe.Language = transcribeLang
 		b.Stages.Report = enableReport
 		b.Stages.EXIF = imageCount > 0
 

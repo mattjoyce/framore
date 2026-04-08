@@ -39,6 +39,7 @@ var startCmd = &cobra.Command{
 			&stages.EXIF{},
 			&stages.Weather{Cfg: cfg},
 			&stages.BirdNet{Cfg: cfg},
+			&stages.Transcribe{Cfg: cfg},
 			&stages.Report{Cfg: cfg},
 		}
 
