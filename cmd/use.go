@@ -5,8 +5,9 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/mattjoyce/framore/internal/batch"
 	"github.com/spf13/cobra"
+
+	"github.com/mattjoyce/framore/internal/batch"
 )
 
 var useCmd = &cobra.Command{
@@ -24,7 +25,7 @@ var useCmd = &cobra.Command{
 		// If file doesn't exist, create from template
 		if _, err := os.Stat(absPath); os.IsNotExist(err) {
 			tmpl := batch.DefaultBatchYAML(cfg)
-			if err := os.WriteFile(absPath, []byte(tmpl), 0o644); err != nil {
+			if err := os.WriteFile(absPath, []byte(tmpl), 0o600); err != nil {
 				return fmt.Errorf("write batch file: %w", err)
 			}
 			fmt.Printf("Created:      %s\n", absPath)

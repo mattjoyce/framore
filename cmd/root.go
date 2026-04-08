@@ -4,8 +4,9 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/mattjoyce/framore/internal/config"
 	"github.com/spf13/cobra"
+
+	"github.com/mattjoyce/framore/internal/config"
 )
 
 var (

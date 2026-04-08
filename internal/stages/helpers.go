@@ -10,6 +10,7 @@ import (
 	"time"
 
 	olc "github.com/google/open-location-code/go"
+
 	"github.com/mattjoyce/framore/internal/batch"
 	"github.com/mattjoyce/framore/internal/pipeline"
 )
@@ -133,7 +134,7 @@ func geocodeNominatim(locality string) (lat, lon float64, err error) {
 	if err != nil {
 		return 0, 0, err
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	var results []struct {
 		Lat string `json:"lat"`

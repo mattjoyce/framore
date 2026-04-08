@@ -7,8 +7,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/mattjoyce/framore/internal/batch"
 	"github.com/spf13/cobra"
+
+	"github.com/mattjoyce/framore/internal/batch"
 )
 
 var supportedExts = map[string]string{

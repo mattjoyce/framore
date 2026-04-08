@@ -7,8 +7,9 @@ import (
 	"os"
 	"time"
 
-	"github.com/mattjoyce/framore/internal/ductile"
 	"github.com/spf13/cobra"
+
+	"github.com/mattjoyce/framore/internal/ductile"
 )
 
 var queuePlugin string
@@ -20,7 +21,7 @@ var queueCmd = &cobra.Command{
 	RunE: func(cmd *cobra.Command, args []string) error {
 		// Quick health check (no auth needed)
 		healthURL := cfg.Services.DuctileAPIURL + "/healthz"
-		healthResp, err := http.Get(healthURL)
+		healthResp, err := http.Get(healthURL) // #nosec G107 — URL from user's config
 		if err != nil {
 			return fmt.Errorf("ductile unreachable at %s: %w", cfg.Services.DuctileAPIURL, err)
 		}

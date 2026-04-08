@@ -72,7 +72,7 @@ func DefaultConfig() *Config {
 				"/mnt/field_Recording",
 			},
 		},
-		Services: Services{
+		Services: Services{ // #nosec G101 — env var names, not credentials
 			DuctileAPIURL:   "http://192.168.20.4:8888",
 			DuctileTokenEnv: "FRAMORE_DUCTILE_TOKEN",
 			OllamaURL:       "http://192.168.20.4:11434",
@@ -94,7 +94,7 @@ func DefaultConfig() *Config {
 func Load() (*Config, error) {
 	path := ConfigPath()
 
-	data, err := os.ReadFile(path)
+	data, err := os.ReadFile(path) // #nosec G304 — path is user's config file
 	if err != nil {
 		if os.IsNotExist(err) {
 			cfg := DefaultConfig()

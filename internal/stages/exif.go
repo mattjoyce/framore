@@ -7,9 +7,10 @@ import (
 	"sort"
 	"time"
 
+	"github.com/rwcarlsen/goexif/exif"
+
 	"github.com/mattjoyce/framore/internal/batch"
 	"github.com/mattjoyce/framore/internal/pipeline"
-	"github.com/rwcarlsen/goexif/exif"
 )
 
 type PhotoGPS struct {

@@ -60,7 +60,7 @@ func (w *Weather) Run(ctx context.Context, b *batch.Batch, results *pipeline.Res
 
 	cacheFile := filepath.Join(cacheDir, fmt.Sprintf("%.4f_%.4f_%s.json", lat, lon, date))
 
-	if data, err := os.ReadFile(cacheFile); err == nil {
+	if data, err := os.ReadFile(cacheFile); err == nil { // #nosec G304 — cache path from config
 		info, _ := os.Stat(cacheFile)
 		maxAge := time.Duration(w.Cfg.Weather.CacheMaxAgeDays) * 24 * time.Hour
 		if time.Since(info.ModTime()) < maxAge {
@@ -91,7 +91,7 @@ func (w *Weather) Run(ctx context.Context, b *batch.Batch, results *pipeline.Res
 	if err != nil {
 		return fmt.Errorf("fetch weather: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {

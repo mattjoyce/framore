@@ -5,8 +5,9 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/mattjoyce/framore/internal/batch"
 	"github.com/spf13/cobra"
+
+	"github.com/mattjoyce/framore/internal/batch"
 )
 
 var noEdit bool

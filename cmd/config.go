@@ -8,9 +8,10 @@ import (
 	"time"
 
 	"github.com/charmbracelet/huh"
+	"github.com/spf13/cobra"
+
 	"github.com/mattjoyce/framore/internal/batch"
 	"github.com/mattjoyce/framore/internal/stages"
-	"github.com/spf13/cobra"
 )
 
 var configCmd = &cobra.Command{

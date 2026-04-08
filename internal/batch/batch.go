@@ -61,7 +61,7 @@ type FileMeta struct {
 
 // Load reads a batch YAML file and unmarshals it into a Batch struct.
 func Load(path string) (*Batch, error) {
-	data, err := os.ReadFile(path)
+	data, err := os.ReadFile(path) // #nosec G304 — path from user's CLI arg
 	if err != nil {
 		return nil, err
 	}

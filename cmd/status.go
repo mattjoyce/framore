@@ -4,9 +4,10 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/spf13/cobra"
+
 	"github.com/mattjoyce/framore/internal/batch"
 	"github.com/mattjoyce/framore/internal/stages"
-	"github.com/spf13/cobra"
 )
 
 var statusCmd = &cobra.Command{

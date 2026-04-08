@@ -53,7 +53,7 @@ func (c *Client) Generate(ctx context.Context, model, prompt string) (string, er
 	if err != nil {
 		return "", fmt.Errorf("http post: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	respBody, err := io.ReadAll(resp.Body)
 	if err != nil {

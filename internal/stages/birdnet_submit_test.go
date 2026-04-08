@@ -122,7 +122,7 @@ func TestBirdNetSubmitAllThenPoll(t *testing.T) {
 
 	// Set up config pointing to test server.
 	cfg := &config.Config{
-		Services: config.Services{
+		Services: config.Services{ // #nosec G101 — env var names, not credentials
 			DuctileAPIURL:   srv.URL,
 			DuctileTokenEnv: "TEST_DUCTILE_TOKEN",
 		},
@@ -320,7 +320,7 @@ func TestBirdNetSubmitAllPartialFailure(t *testing.T) {
 	defer srv.Close()
 
 	cfg := &config.Config{
-		Services: config.Services{
+		Services: config.Services{ // #nosec G101 — env var names, not credentials
 			DuctileAPIURL:   srv.URL,
 			DuctileTokenEnv: "TEST_DUCTILE_TOKEN2",
 		},

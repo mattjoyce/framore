@@ -9,8 +9,9 @@ import (
 	"path/filepath"
 	"time"
 
-	"github.com/mattjoyce/framore/internal/batch"
 	"github.com/spf13/cobra"
+
+	"github.com/mattjoyce/framore/internal/batch"
 )
 
 var transcribeDuration int
@@ -53,7 +54,7 @@ var transcribeCmd = &cobra.Command{
 		if err != nil {
 			return fmt.Errorf("whisper request failed: %w", err)
 		}
-		defer resp.Body.Close()
+		defer func() { _ = resp.Body.Close() }()
 
 		respBody, err := io.ReadAll(resp.Body)
 		if err != nil {

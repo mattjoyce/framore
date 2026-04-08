@@ -68,7 +68,7 @@ func (r *Report) Run(ctx context.Context, b *batch.Batch, results *pipeline.Resu
 // If the file doesn't exist, writes the built-in default and returns it.
 func loadPromptTemplate() string {
 	path := filepath.Join(config.ConfigDir(), "report_prompt.md")
-	data, err := os.ReadFile(path)
+	data, err := os.ReadFile(path) // #nosec G304 — path is user's config dir
 	if err != nil {
 		// Write default so the user can edit it
 		_ = os.MkdirAll(config.ConfigDir(), 0o750)
