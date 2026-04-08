@@ -566,6 +566,84 @@ Job response (on success):
 
 ---
 
+## Stage: Transcribe
+
+**Purpose:** transcribe spoken field notes from the first and last N seconds of each WAV file using the faster-whisper REST API running on the NAS.
+
+**Service:** `http://192.168.20.4:8765` (configurable via `config.toml` → `[services] whisper_url`). Direct HTTP — no Ductile queue. The whisper container is lightweight enough to call sequentially.
+
+**Batch config:**
+
+```yaml
+transcribe:
+  duration_seconds: 60   # transcribe first/last N seconds of each file
+  language: ""           # blank = auto-detect; or "en", "de", etc.
+```
+
+**Execution model: sequential HTTP POST per file**
+
+For each audio file in the batch:
+
+1. Translate the Mac path to NAS path via `CheckAllowedPath()`
+2. POST to `{whisper_url}/transcribe` with JSON payload
+3. Parse the response and store the result
+
+This is simpler than BirdNET — no job queue, no polling. Each file blocks until the whisper service returns.
+
+**Payload (POST `/transcribe`):**
+
+```json
+{
+  "wav_path": "/mnt/user/field_Recording/F3/Orig/.../221053_0001.WAV",
+  "duration_seconds": 60,
+  "language": ""
+}
+```
+
+**Response (200 OK):**
+
+```json
+{
+  "transcripts": [
+    {
+      "segment": "start",
+      "text": "Walking along the creek trail, light rain, about 7am",
+      "language": "en",
+      "language_probability": 0.98
+    },
+    {
+      "segment": "end",
+      "text": "",
+      "language": "",
+      "language_probability": 0.0
+    }
+  ]
+}
+```
+
+**Result type:**
+
+```go
+type TranscriptSegment struct {
+    Segment             string  `json:"segment"`
+    Text                string  `json:"text"`
+    Language            string  `json:"language"`
+    LanguageProbability float64 `json:"language_probability"`
+}
+
+type TranscribeFileResult struct {
+    FilePath    string              `json:"file_path"`
+    Transcripts []TranscriptSegment `json:"transcripts"`
+}
+```
+
+**Results storage:**
+- Per-file: `results.Set("transcribe", file.Path, transcribeFileResult)`
+
+**Error handling:** if the whisper service is unreachable or returns an error for a file, log the error and skip to the next file. The stage does not abort the pipeline.
+
+---
+
 ## Stage: Report
 
 **Purpose:** merge all stage results and write `session_report.md` + `session.json` into the session folder. Uses Ollama to write the narrative section.
@@ -595,7 +673,7 @@ var Registry = []Stage{
     &stages.EXIF{},
     &stages.Weather{},
     &stages.BirdNet{},
-    // &stages.Transcribe{},  // deferred
+    &stages.Transcribe{},
     &stages.Report{},
 }
 ```
@@ -708,7 +786,7 @@ Run `make check` before every commit.
 
 | Item | Notes |
 |---|---|
-| `transcribe` stage | Needs faster-whisper Docker on NAS; wire in when container exists |
+| `transcribe` stage | Implemented — calls faster-whisper REST API directly |
 | `spectrogram` stage | melspec-to-video; low priority |
 | FLAC/MP3 inspection | WAV only for now |
 | Parallel stage execution | GPU stages serialised by Ductile anyway |
