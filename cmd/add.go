@@ -19,6 +19,8 @@ var supportedExts = map[string]string{
 	".png":  "image",
 }
 
+var addRecurse bool
+
 var addCmd = &cobra.Command{
 	Use:   "add <path> [path...]",
 	Short: "Add files to the active batch",
@@ -52,18 +54,32 @@ var addCmd = &cobra.Command{
 					continue
 				}
 				if info.IsDir() {
-					// Recurse directory
-					err := filepath.Walk(m, func(p string, fi os.FileInfo, err error) error {
-						if err != nil {
+					if addRecurse {
+						// Walk subdirectories recursively
+						err := filepath.Walk(m, func(p string, fi os.FileInfo, err error) error {
+							if err != nil {
+								return nil
+							}
+							if !fi.IsDir() {
+								paths = append(paths, p)
+							}
 							return nil
+						})
+						if err != nil {
+							fmt.Printf("✗ %s — %v\n", m, err)
 						}
-						if !fi.IsDir() {
-							paths = append(paths, p)
+					} else {
+						// Top-level files only
+						entries, err := os.ReadDir(m)
+						if err != nil {
+							fmt.Printf("✗ %s — %v\n", m, err)
+							continue
 						}
-						return nil
-					})
-					if err != nil {
-						fmt.Printf("✗ %s — %v\n", m, err)
+						for _, e := range entries {
+							if !e.IsDir() {
+								paths = append(paths, filepath.Join(m, e.Name()))
+							}
+						}
 					}
 				} else {
 					paths = append(paths, m)
@@ -136,5 +152,6 @@ var addCmd = &cobra.Command{
 }
 
 func init() {
+	addCmd.Flags().BoolVarP(&addRecurse, "recurse", "r", false, "Walk subdirectories recursively")
 	rootCmd.AddCommand(addCmd)
 }
