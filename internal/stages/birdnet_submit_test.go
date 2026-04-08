@@ -377,6 +377,85 @@ func mustJSON(t *testing.T, v any) json.RawMessage {
 	return json.RawMessage(data)
 }
 
+func TestBirdNetSubmitOnly(t *testing.T) {
+	// When SubmitOnly is true, jobs are submitted but no polling occurs.
+	var submits, polls int
+	var mu sync.Mutex
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		mu.Lock()
+		defer mu.Unlock()
+		if strings.HasPrefix(r.URL.Path, "/plugin/") {
+			submits++
+			w.WriteHeader(http.StatusAccepted)
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"job_id": fmt.Sprintf("job-%d", submits),
+				"status": "queued",
+			})
+			return
+		}
+		if strings.HasPrefix(r.URL.Path, "/job/") {
+			polls++
+			w.WriteHeader(http.StatusOK)
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"job_id": strings.TrimPrefix(r.URL.Path, "/job/"),
+				"status": "succeeded",
+				"result": map[string]any{
+					"status": "ok", "output_path": "/out/x.csv",
+					"detections": []any{}, "detection_count": 0,
+					"duration_s": 10.0, "realtime_factor": 2.0,
+				},
+			})
+			return
+		}
+		w.WriteHeader(http.StatusNotFound)
+	}))
+	defer srv.Close()
+
+	cfg := &config.Config{
+		Services: config.Services{DuctileAPIURL: srv.URL, DuctileTokenEnv: "TEST_SUBMIT_ONLY_TOKEN"},
+		Defaults: config.Defaults{BirdnetMinConf: 0.5},
+		Paths: config.Paths{
+			ProcessingRoot: "/mnt/user/field_Recording",
+			AllowedPaths:   []string{"/Volumes/field_Recording"},
+		},
+	}
+	t.Setenv("TEST_SUBMIT_ONLY_TOKEN", "tok")
+
+	b := &batch.Batch{
+		SessionDate: "2026-03-29",
+		Stages:      batch.StageConfig{BirdNet: true},
+		Pipeline:    batch.PipelineConfig{DefaultLat: -34.0, DefaultLon: 150.5},
+		Files: []batch.FileEntry{
+			{Path: "/Volumes/field_Recording/F3/Orig/a.WAV", Type: "audio"},
+			{Path: "/Volumes/field_Recording/F3/Orig/b.WAV", Type: "audio"},
+		},
+	}
+
+	results := pipeline.NewResults()
+	bn := &BirdNet{Cfg: cfg, SubmitOnly: true}
+	if err := bn.Run(context.Background(), b, results); err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+
+	mu.Lock()
+	gotSubmits := submits
+	gotPolls := polls
+	mu.Unlock()
+
+	if gotSubmits != 2 {
+		t.Errorf("expected 2 submits, got %d", gotSubmits)
+	}
+	if gotPolls != 0 {
+		t.Errorf("expected 0 polls in submit-only mode, got %d", gotPolls)
+	}
+
+	// No session result should be stored in submit-only mode
+	if _, ok := results.Get("birdnet", "session"); ok {
+		t.Error("unexpected session result in submit-only mode")
+	}
+}
+
 func TestBirdNetSubmitNonAudioSkipped(t *testing.T) {
 	// Verify non-audio files are not submitted.
 	var submitMu sync.Mutex

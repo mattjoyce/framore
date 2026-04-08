@@ -14,6 +14,7 @@ import (
 var (
 	startStage  string
 	startDryRun bool
+	submitOnly  bool
 	verbose     bool
 )
 
@@ -38,7 +39,7 @@ var startCmd = &cobra.Command{
 		registry := []pipeline.Stage{
 			&stages.EXIF{},
 			&stages.Weather{Cfg: cfg},
-			&stages.BirdNet{Cfg: cfg},
+			&stages.BirdNet{Cfg: cfg, SubmitOnly: submitOnly},
 			&stages.Transcribe{Cfg: cfg},
 			&stages.Report{Cfg: cfg},
 		}
@@ -78,6 +79,7 @@ var startCmd = &cobra.Command{
 func init() {
 	startCmd.Flags().StringVar(&startStage, "stage", "", "Run a single stage only")
 	startCmd.Flags().BoolVar(&startDryRun, "dry-run", false, "Print plan, don't execute")
+	startCmd.Flags().BoolVar(&submitOnly, "submit-only", false, "Submit jobs and exit without polling")
 	startCmd.Flags().BoolVar(&verbose, "verbose", false, "Per-file progress lines")
 	rootCmd.AddCommand(startCmd)
 }

@@ -105,7 +105,8 @@ func birdnetOutputPath(wavPath string) string {
 }
 
 type BirdNet struct {
-	Cfg *config.Config
+	Cfg        *config.Config
+	SubmitOnly bool
 }
 
 func (bn *BirdNet) Name() string { return "birdnet" }
@@ -175,6 +176,14 @@ func (bn *BirdNet) Run(ctx context.Context, b *batch.Batch, results *pipeline.Re
 
 		fmt.Printf("  [birdnet] job %s queued for %s\n", sr.JobID, f.Path)
 		pending = append(pending, pendingJob{jobID: sr.JobID, filePath: f.Path})
+	}
+
+	if bn.SubmitOnly {
+		fmt.Printf("  [birdnet] submitted %d jobs (submit-only mode, skipping poll)\n", len(pending))
+		if skipped > 0 {
+			fmt.Printf("  [birdnet] skipped %d files (existing output)\n", skipped)
+		}
+		return nil
 	}
 
 	if skipped > 0 {
