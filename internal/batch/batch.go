@@ -31,8 +31,7 @@ type BirdNetConfig struct {
 }
 
 type TranscribeConfig struct {
-	DurationSeconds int    `yaml:"duration_seconds"`
-	Language        string `yaml:"language,omitempty"`
+	DurationSeconds int `yaml:"duration_seconds"`
 }
 
 type WeatherStageConfig struct {

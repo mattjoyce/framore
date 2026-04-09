@@ -21,7 +21,6 @@ birdnet:
   min_conf: %.1f
 transcribe:
   duration_seconds: 60
-  language: ""
 weather:
   timezone: "%s"
 pipeline:

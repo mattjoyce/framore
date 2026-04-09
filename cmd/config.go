@@ -162,7 +162,6 @@ var configCmd = &cobra.Command{
 		if b.Transcribe.DurationSeconds == 0 {
 			transcribeDurStr = "60"
 		}
-		transcribeLang := b.Transcribe.Language
 
 		// ── Transcription group ──
 		transcribeGroup := huh.NewGroup(
@@ -185,9 +184,6 @@ var configCmd = &cobra.Command{
 					}
 					return nil
 				}),
-			huh.NewInput().
-				Title("Language (blank for auto-detect, or 'en', 'de', etc)").
-				Value(&transcribeLang),
 		)
 
 		// ── Report group ──
@@ -253,7 +249,6 @@ var configCmd = &cobra.Command{
 		b.BirdNet.SkipExisting = skipExisting
 		b.Stages.Transcribe = enableTranscribe
 		b.Transcribe.DurationSeconds, _ = strconv.Atoi(transcribeDurStr)
-		b.Transcribe.Language = transcribeLang
 		b.Stages.Report = enableReport
 		b.Stages.EXIF = imageCount > 0
 

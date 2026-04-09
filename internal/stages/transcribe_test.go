@@ -123,21 +123,23 @@ func TestTranscribeDisabled(t *testing.T) {
 	}
 }
 
-func TestTranscribeWithLanguage(t *testing.T) {
-	var gotLanguage string
+func TestTranscribePayloadHasNoLanguage(t *testing.T) {
+	// The whisper container does not read `language` from the request body;
+	// model language is fixed at container startup via WHISPER_MODEL.
+	// Ensure we don't send a ghost field.
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		var req map[string]any
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 			t.Errorf("decode: %v", err)
 			return
 		}
-		if lang, ok := req["language"]; ok {
-			gotLanguage = lang.(string)
+		if _, ok := req["language"]; ok {
+			t.Error("payload should not include 'language' field — server ignores it")
 		}
 
 		resp := map[string]any{
 			"transcripts": []map[string]any{
-				{"segment": "start", "text": "test", "language": "de", "language_probability": 0.95},
+				{"segment": "start", "text": "test", "language": "en", "language_probability": 0.95},
 			},
 		}
 		w.Header().Set("Content-Type", "application/json")
@@ -152,19 +154,14 @@ func TestTranscribeWithLanguage(t *testing.T) {
 
 	b := &batch.Batch{
 		Stages:     batch.StageConfig{Transcribe: true},
-		Transcribe: batch.TranscribeConfig{DurationSeconds: 30, Language: "de"},
+		Transcribe: batch.TranscribeConfig{DurationSeconds: 30},
 		Files: []batch.FileEntry{
 			{Path: "/Volumes/field_Recording/F3/Orig/test/file.WAV", Type: "audio"},
 		},
 	}
 
 	results := pipeline.NewResults()
-	err := (&Transcribe{Cfg: cfg}).Run(context.Background(), b, results)
-	if err != nil {
+	if err := (&Transcribe{Cfg: cfg}).Run(context.Background(), b, results); err != nil {
 		t.Fatalf("Run() error: %v", err)
-	}
-
-	if gotLanguage != "de" {
-		t.Errorf("language sent = %q, want %q", gotLanguage, "de")
 	}
 }

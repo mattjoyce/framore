@@ -572,12 +572,13 @@ Job response (on success):
 
 **Service:** `http://192.168.20.4:8765` (configurable via `config.toml` → `[services] whisper_url`). Direct HTTP — no Ductile queue. The whisper container is lightweight enough to call sequentially.
 
+**Model:** the container loads a fixed model at startup via the `WHISPER_MODEL` env var (currently `medium.en`). Language is therefore **fixed per container deployment, not per batch** — there is no request-time language override. To change language, redeploy the container with a different model.
+
 **Batch config:**
 
 ```yaml
 transcribe:
   duration_seconds: 60   # transcribe first/last N seconds of each file
-  language: ""           # blank = auto-detect; or "en", "de", etc.
 ```
 
 **Execution model: sequential HTTP POST per file**
@@ -588,22 +589,25 @@ For each audio file in the batch:
 2. POST to `{whisper_url}/transcribe` with JSON payload
 3. Parse the response and store the result
 
-This is simpler than BirdNET — no job queue, no polling. Each file blocks until the whisper service returns.
+Non-audio entries are skipped. This is simpler than BirdNET — no job queue, no polling. Each file blocks until the whisper service returns. The HTTP client uses a 120-second timeout per request; first call after ~5 minutes idle is slower because the container lazily reloads the model.
 
 **Payload (POST `/transcribe`):**
 
 ```json
 {
   "wav_path": "/mnt/user/field_Recording/F3/Orig/.../221053_0001.WAV",
-  "duration_seconds": 60,
-  "language": ""
+  "duration_seconds": 60
 }
 ```
+
+`wav_path` is required. `duration_seconds` defaults to 60 on the server if omitted.
 
 **Response (200 OK):**
 
 ```json
 {
+  "wav_path": "/mnt/user/field_Recording/F3/Orig/.../221053_0001.WAV",
+  "duration_seconds": 60,
   "transcripts": [
     {
       "segment": "start",
@@ -613,13 +617,19 @@ This is simpler than BirdNET — no job queue, no polling. Each file blocks unti
     },
     {
       "segment": "end",
-      "text": "",
-      "language": "",
-      "language_probability": 0.0
+      "text": "Heading back to the car, magpies still calling",
+      "language": "en",
+      "language_probability": 0.995
     }
   ]
 }
 ```
+
+The `end` segment is **only present when the file is longer than `2 * duration_seconds`**. For shorter files, `transcripts` contains only the `start` entry. The `wav_path` and `duration_seconds` echo fields are informational — the Go client ignores them.
+
+**Error responses:**
+- `400 {"error": "missing wav_path"}` — payload did not include `wav_path`
+- `404 {"error": "file not found: <path>"}` — `wav_path` does not exist on the NAS filesystem
 
 **Result type:**
 
@@ -640,7 +650,7 @@ type TranscribeFileResult struct {
 **Results storage:**
 - Per-file: `results.Set("transcribe", file.Path, transcribeFileResult)`
 
-**Error handling:** if the whisper service is unreachable or returns an error for a file, log the error and skip to the next file. The stage does not abort the pipeline.
+**Error handling:** if the whisper service is unreachable or returns a non-200 for a file, log the error with the response body and skip to the next file. The stage does not abort the pipeline.
 
 ---
 

@@ -66,9 +66,6 @@ func (t *Transcribe) Run(ctx context.Context, b *batch.Batch, results *pipeline.
 			"wav_path":         nasPath,
 			"duration_seconds": duration,
 		}
-		if b.Transcribe.Language != "" {
-			payload["language"] = b.Transcribe.Language
-		}
 
 		body, err := json.Marshal(payload)
 		if err != nil {
