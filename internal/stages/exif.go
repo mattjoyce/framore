@@ -26,6 +26,8 @@ func (e *EXIF) Name() string { return "exif" }
 
 func (e *EXIF) Enabled(b *batch.Batch) bool { return b.Stages.EXIF }
 
+func (e *EXIF) SupportsNoWait() bool { return true }
+
 func (e *EXIF) Run(ctx context.Context, b *batch.Batch, results *pipeline.Results) error {
 	var photos []PhotoGPS
 

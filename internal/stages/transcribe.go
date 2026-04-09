@@ -37,6 +37,10 @@ func (t *Transcribe) Name() string { return "transcribe" }
 
 func (t *Transcribe) Enabled(b *batch.Batch) bool { return b.Stages.Transcribe }
 
+// SupportsNoWait returns false — transcribe blocks on synchronous HTTP per file
+// and has no queued/fire-and-forget mode.
+func (t *Transcribe) SupportsNoWait() bool { return false }
+
 func (t *Transcribe) Run(ctx context.Context, b *batch.Batch, results *pipeline.Results) error {
 	whisperURL := t.Cfg.Services.WhisperURL
 	if whisperURL == "" {

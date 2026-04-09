@@ -377,8 +377,8 @@ func mustJSON(t *testing.T, v any) json.RawMessage {
 	return json.RawMessage(data)
 }
 
-func TestBirdNetSubmitOnly(t *testing.T) {
-	// When SubmitOnly is true, jobs are submitted but no polling occurs.
+func TestBirdNetNoWait(t *testing.T) {
+	// When NoWait is true, jobs are submitted but no polling occurs.
 	var submits, polls int
 	var mu sync.Mutex
 
@@ -433,7 +433,7 @@ func TestBirdNetSubmitOnly(t *testing.T) {
 	}
 
 	results := pipeline.NewResults()
-	bn := &BirdNet{Cfg: cfg, SubmitOnly: true}
+	bn := &BirdNet{Cfg: cfg, NoWait: true}
 	if err := bn.Run(context.Background(), b, results); err != nil {
 		t.Fatalf("Run: %v", err)
 	}
@@ -447,12 +447,12 @@ func TestBirdNetSubmitOnly(t *testing.T) {
 		t.Errorf("expected 2 submits, got %d", gotSubmits)
 	}
 	if gotPolls != 0 {
-		t.Errorf("expected 0 polls in submit-only mode, got %d", gotPolls)
+		t.Errorf("expected 0 polls in --no-wait mode, got %d", gotPolls)
 	}
 
-	// No session result should be stored in submit-only mode
+	// No session result should be stored in --no-wait mode
 	if _, ok := results.Get("birdnet", "session"); ok {
-		t.Error("unexpected session result in submit-only mode")
+		t.Error("unexpected session result in --no-wait mode")
 	}
 }
 

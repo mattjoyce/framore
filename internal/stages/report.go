@@ -48,6 +48,10 @@ func (r *Report) Name() string { return "report" }
 
 func (r *Report) Enabled(b *batch.Batch) bool { return b.Stages.Report }
 
+// SupportsNoWait returns false — report depends on completed birdnet results
+// and blocks on synchronous LLM generation.
+func (r *Report) SupportsNoWait() bool { return false }
+
 func (r *Report) Run(ctx context.Context, b *batch.Batch, results *pipeline.Results) error {
 	systemPrompt := loadPromptTemplate(r.Cfg.Report.PromptFile)
 	client := ollama.NewClient(r.Cfg.Services.OllamaURL)

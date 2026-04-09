@@ -10,6 +10,10 @@ import (
 type Stage interface {
 	Name() string
 	Enabled(b *batch.Batch) bool
+	// SupportsNoWait reports whether this stage can run under --no-wait.
+	// Return false for stages that block on synchronous external work
+	// (e.g. direct HTTP per file) or depend on other stages' results.
+	SupportsNoWait() bool
 	Run(ctx context.Context, b *batch.Batch, results *Results) error
 }
 

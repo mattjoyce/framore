@@ -42,6 +42,8 @@ func (w *Weather) Name() string { return "weather" }
 
 func (w *Weather) Enabled(b *batch.Batch) bool { return b.Stages.Weather }
 
+func (w *Weather) SupportsNoWait() bool { return true }
+
 func (w *Weather) Run(ctx context.Context, b *batch.Batch, results *pipeline.Results) error {
 	lat, lon := ResolveGPS(b, results)
 

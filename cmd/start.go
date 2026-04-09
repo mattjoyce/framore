@@ -14,7 +14,7 @@ import (
 var (
 	startStage  string
 	startDryRun bool
-	submitOnly  bool
+	noWait      bool
 	verbose     bool
 )
 
@@ -39,7 +39,7 @@ var startCmd = &cobra.Command{
 		registry := []pipeline.Stage{
 			&stages.EXIF{},
 			&stages.Weather{Cfg: cfg},
-			&stages.BirdNet{Cfg: cfg, SubmitOnly: submitOnly},
+			&stages.BirdNet{Cfg: cfg, NoWait: noWait},
 			&stages.Transcribe{Cfg: cfg},
 			&stages.Report{Cfg: cfg},
 		}
@@ -71,7 +71,7 @@ var startCmd = &cobra.Command{
 		}
 
 		ctx := context.Background()
-		_, err = pipeline.Run(ctx, b, registry, verbose)
+		_, err = pipeline.Run(ctx, b, registry, verbose, noWait)
 		return err
 	},
 }
@@ -79,7 +79,7 @@ var startCmd = &cobra.Command{
 func init() {
 	startCmd.Flags().StringVar(&startStage, "stage", "", "Run a single stage only")
 	startCmd.Flags().BoolVar(&startDryRun, "dry-run", false, "Print plan, don't execute")
-	startCmd.Flags().BoolVar(&submitOnly, "submit-only", false, "Submit jobs and exit without polling")
+	startCmd.Flags().BoolVar(&noWait, "no-wait", false, "Fire queueable work and exit (skips stages that block on synchronous external work)")
 	startCmd.Flags().BoolVar(&verbose, "verbose", false, "Per-file progress lines")
 	rootCmd.AddCommand(startCmd)
 }

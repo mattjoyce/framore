@@ -105,13 +105,15 @@ func birdnetOutputPath(wavPath string) string {
 }
 
 type BirdNet struct {
-	Cfg        *config.Config
-	SubmitOnly bool
+	Cfg    *config.Config
+	NoWait bool
 }
 
 func (bn *BirdNet) Name() string { return "birdnet" }
 
 func (bn *BirdNet) Enabled(b *batch.Batch) bool { return b.Stages.BirdNet }
+
+func (bn *BirdNet) SupportsNoWait() bool { return true }
 
 func (bn *BirdNet) Run(ctx context.Context, b *batch.Batch, results *pipeline.Results) error {
 	started := time.Now()
@@ -178,8 +180,8 @@ func (bn *BirdNet) Run(ctx context.Context, b *batch.Batch, results *pipeline.Re
 		pending = append(pending, pendingJob{jobID: sr.JobID, filePath: f.Path})
 	}
 
-	if bn.SubmitOnly {
-		fmt.Printf("  [birdnet] submitted %d jobs (submit-only mode, skipping poll)\n", len(pending))
+	if bn.NoWait {
+		fmt.Printf("  [birdnet] submitted %d jobs (--no-wait, skipping poll)\n", len(pending))
 		if skipped > 0 {
 			fmt.Printf("  [birdnet] skipped %d files (existing output)\n", skipped)
 		}
